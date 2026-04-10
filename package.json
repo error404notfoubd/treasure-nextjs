@@ -1,0 +1,25 @@
+{
+  "name": "treasure-hunt-slots",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@prelude.so/sdk": "^0.10.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "next": "^15.2.4",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^15.2.4"
+  }
+}
