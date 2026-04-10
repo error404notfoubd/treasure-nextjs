@@ -2,7 +2,7 @@
   "name": "treasure-hunt-slots",
   "version": "1.0.0",
   "private": true,
-    "packageManager": "pnpm@latest",
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
