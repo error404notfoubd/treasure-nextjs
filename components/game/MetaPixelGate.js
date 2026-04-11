@@ -1,21 +1,27 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Script from 'next/script';
 import CookieConsent from './CookieConsent';
 
-export default function MetaPixelGate({ pixelId }) {
+export default function MetaPixelGate({ pixelId, cookieFullscreenDelaySec }) {
   const [consented, setConsented] = useState(false);
 
   const handleAccept = useCallback(() => {
     setConsented(true);
   }, []);
 
+  useEffect(() => {
+    const onForceAccept = () => setConsented(true);
+    window.addEventListener('cookie-consent-accepted', onForceAccept);
+    return () => window.removeEventListener('cookie-consent-accepted', onForceAccept);
+  }, []);
+
   if (!pixelId) return null;
 
   return (
     <>
-      <CookieConsent onAccept={handleAccept} />
+      <CookieConsent onAccept={handleAccept} fullscreenDelaySec={cookieFullscreenDelaySec} />
       {consented && (
         <Script id="meta-pixel" strategy="afterInteractive">{`
           !function(f,b,e,v,n,t,s)

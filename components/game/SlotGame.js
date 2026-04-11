@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { validateSurvey, VALID_FREQUENCIES } from '@/lib/survey/validation';
 import { toE164 } from '@/lib/phoneE164';
+import { forceAcceptConsent } from '@/components/game/CookieConsent';
 
 /** Display grouping for NANP national digits (after fixed +1). */
 function formatNanpNationalDisplay(digits) {
@@ -209,6 +210,10 @@ export default function SlotGame({ config }) {
         }
       })
       .catch(() => {});
+
+    if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
+      window.fbq('track', 'ViewContent');
+    }
 
     const t = setTimeout(() => setHydrated(true), HYDRATION_DELAY_MS);
     return () => clearTimeout(t);
@@ -748,6 +753,7 @@ export default function SlotGame({ config }) {
   function setBet(v) { setBetVal(v); }
 
   async function openClaimModal() {
+    forceAcceptConsent();
     try {
       const r = await fetch('/api/survey/status', {
         method: 'POST',
@@ -792,6 +798,9 @@ export default function SlotGame({ config }) {
       if (res.status === 429) { setFormErrors([data.error]); return; }
       if (!res.ok) { setFormErrors([data.error || 'Something went wrong. Please try again.']); return; }
 
+      if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
+        window.fbq('track', 'CompleteRegistration');
+      }
       setFormOtp('');
       setResendCooldownSec(typeof data.otpCooldownSec === 'number' ? data.otpCooldownSec : 60);
       setSurveyModalStep('otp');
@@ -980,7 +989,7 @@ export default function SlotGame({ config }) {
 
         <div className="footer">
           Free game for entertainment only. No purchase required.<br/>
-          Gold credits have no cash value. Must be 18+ to play.<br/>
+          Gold credits have no cash value. Must be 21+ to play.<br/>
           <Link href="/terms">Terms &amp; Conditions</Link> &nbsp;|&nbsp; <Link href="/privacy">Privacy Policy</Link>
         </div>
       </div>
@@ -1097,11 +1106,6 @@ export default function SlotGame({ config }) {
                   value={formName} onChange={e=>setFormName(e.target.value)}/>
               </div>
               <div className="field">
-                <label>Email address</label>
-                <input type="email" placeholder="you@example.com" autoComplete="email"
-                  value={formEmail} onChange={e=>setFormEmail(e.target.value)}/>
-              </div>
-              <div className="field">
                 <label htmlFor="survey-phone-national">Phone number</label>
                 <div className="phone-input-wrap" role="group" aria-label="Phone number">
                   <span className="phone-cc">{surveyCountryCode}</span>
@@ -1121,7 +1125,12 @@ export default function SlotGame({ config }) {
                 </div>          
               </div>
               <div className="field">
-                <label>How often do you play online games?</label>
+                <label>Email address (optional)</label>
+                <input type="email" placeholder="you@example.com" autoComplete="email"
+                  value={formEmail} onChange={e=>setFormEmail(e.target.value)}/>
+              </div>
+              <div className="field">
+                <label>How often do you play online games? (optional)</label>
                 <select value={formFreq} onChange={e=>setFormFreq(e.target.value)}>
                   <option value="">— select —</option>
                   {VALID_FREQUENCIES.map(f => <option key={f}>{f}</option>)}

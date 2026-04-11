@@ -632,7 +632,7 @@ body{
 }
 .survey-note strong{color:#d4a840;display:block;margin-bottom:4px;}
 .field{margin-bottom:12px;}
-.field label{display:block;font-size:8px;color:#a08040;letter-spacing:.16em;text-transform:uppercase;margin-bottom:5px;}
+.field label{display:block;font-size:clamp(11px,3vw,13px);color:#a08040;letter-spacing:.12em;text-transform:uppercase;margin-bottom:5px;}
 .field input,.field select{
   width:100%;background:#080600;border:1px solid rgba(200,146,10,.22);border-radius:8px;
   color:var(--gold2);font-family:var(--font-body);font-size:clamp(14px,4vw,16px);

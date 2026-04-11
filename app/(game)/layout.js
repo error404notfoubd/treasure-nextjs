@@ -1,4 +1,5 @@
 import MetaPixelGate from '@/components/game/MetaPixelGate';
+import { gameConfig } from '@/lib/config';
 import '../globals.css';
 
 export const metadata = {
@@ -27,7 +28,7 @@ export default function GameLayout({ children }) {
   return (
     <>
       {children}
-      <MetaPixelGate pixelId={PIXEL_ID} />
+      <MetaPixelGate pixelId={PIXEL_ID} cookieFullscreenDelaySec={gameConfig.COOKIE_FULLSCREEN_DELAY_SEC} />
       {PIXEL_ID && (
         <noscript>
           <img

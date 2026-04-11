@@ -106,6 +106,16 @@ export async function POST(request) {
       }
     }
 
+    const { data: phoneExists } = await supabase
+      .rpc('fn_phone_exists', { p_phone: e164 });
+
+    if (phoneExists) {
+      return NextResponse.json(
+        { error: 'This phone number is already registered. If this is you, thank you for participating!' },
+        { status: 409 }
+      );
+    }
+
     if (cleanEmail) {
       const { data: emailExists } = await supabase
         .rpc('fn_email_exists', { p_email: cleanEmail });
@@ -116,16 +126,6 @@ export async function POST(request) {
           { status: 409 }
         );
       }
-    }
-
-    const { data: phoneExists } = await supabase
-      .rpc('fn_phone_exists', { p_phone: e164 });
-
-    if (phoneExists) {
-      return NextResponse.json(
-        { error: 'This phone number is already registered. If this is you, thank you for participating!' },
-        { status: 409 }
-      );
     }
 
     if (!isPreludeConfigured()) {

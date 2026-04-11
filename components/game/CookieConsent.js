@@ -4,14 +4,24 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 
 const CONSENT_KEY = 'cookie_consent';
+const CONSENT_ACCEPTED_EVENT = 'cookie-consent-accepted';
+const DEFAULT_FULLSCREEN_DELAY_SEC = 8;
 
 export function getConsentValue() {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(CONSENT_KEY);
 }
 
-export default function CookieConsent({ onAccept }) {
+/** Programmatically accept cookie consent (overrides a previous decline). */
+export function forceAcceptConsent() {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(CONSENT_KEY, 'accepted');
+  window.dispatchEvent(new Event(CONSENT_ACCEPTED_EVENT));
+}
+
+export default function CookieConsent({ onAccept, fullscreenDelaySec }) {
   const [visible, setVisible] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     const stored = getConsentValue();
@@ -20,7 +30,21 @@ export default function CookieConsent({ onAccept }) {
     } else if (!stored) {
       setVisible(true);
     }
+
+    const onForceAccept = () => {
+      setVisible(false);
+      onAccept?.();
+    };
+    window.addEventListener(CONSENT_ACCEPTED_EVENT, onForceAccept);
+    return () => window.removeEventListener(CONSENT_ACCEPTED_EVENT, onForceAccept);
   }, [onAccept]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const delaySec = fullscreenDelaySec ?? DEFAULT_FULLSCREEN_DELAY_SEC;
+    const t = setTimeout(() => setFullscreen(true), delaySec * 1000);
+    return () => clearTimeout(t);
+  }, [visible]);
 
   const accept = useCallback(() => {
     localStorage.setItem(CONSENT_KEY, 'accepted');
@@ -37,28 +61,53 @@ export default function CookieConsent({ onAccept }) {
 
   return (
     <div style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999,
-      background: 'linear-gradient(180deg, rgba(6,4,2,0.92) 0%, rgba(6,4,2,0.98) 100%)',
-      borderTop: '1px solid rgba(245,200,66,0.25)',
+      position: 'fixed', zIndex: 9999,
+      inset: fullscreen ? 0 : 'auto 0 0 0',
+      background: fullscreen
+        ? 'rgba(6,4,2,0.96)'
+        : 'linear-gradient(180deg, rgba(6,4,2,0.92) 0%, rgba(6,4,2,0.98) 100%)',
+      borderTop: fullscreen ? 'none' : '1px solid rgba(245,200,66,0.25)',
       backdropFilter: 'blur(12px)',
-      padding: '16px 20px',
+      padding: fullscreen ? '0 20px' : '16px 20px',
       fontFamily: "'Cinzel', serif",
+      display: fullscreen ? 'flex' : 'block',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'all 0.6s ease',
     }}>
       <div style={{
         maxWidth: 720, margin: '0 auto',
-        display: 'flex', flexDirection: 'column', gap: 12,
+        display: 'flex', flexDirection: 'column', gap: fullscreen ? 20 : 12,
+        textAlign: fullscreen ? 'center' : 'left',
       }}>
-        <p style={{ color: '#e8dcc8', fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+        {fullscreen && (
+          <p style={{
+            color: '#f5c842', fontSize: 20, fontWeight: 700,
+            margin: '0 0 4px 0', letterSpacing: '0.04em',
+          }}>
+            Before You Continue
+          </p>
+        )}
+        <p style={{
+          color: '#e8dcc8',
+          fontSize: fullscreen ? 15 : 13,
+          lineHeight: 1.6, margin: 0,
+        }}>
           We use essential cookies to run the site and, with your consent, advertising cookies
           (Meta Pixel) to measure ad performance.
           See our <Link href="/privacy" style={{ color: '#f5c842', textDecoration: 'underline' }}>Privacy Policy</Link> for
           details.
         </p>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{
+          display: 'flex', gap: 12, flexWrap: 'wrap',
+          justifyContent: fullscreen ? 'center' : 'flex-start',
+        }}>
           <button onClick={accept} style={{
             background: 'linear-gradient(180deg, #f5c842 0%, #c8920a 100%)',
             color: '#1a1408', border: 'none', borderRadius: 6,
-            padding: '8px 22px', fontSize: 13, fontWeight: 700,
+            padding: fullscreen ? '12px 32px' : '8px 22px',
+            fontSize: fullscreen ? 15 : 13,
+            fontWeight: 700,
             fontFamily: "'Cinzel', serif", cursor: 'pointer',
             letterSpacing: '0.02em',
           }}>
@@ -67,7 +116,9 @@ export default function CookieConsent({ onAccept }) {
           <button onClick={decline} style={{
             background: 'transparent',
             color: '#a89878', border: '1px solid rgba(245,200,66,0.3)', borderRadius: 6,
-            padding: '8px 22px', fontSize: 13, fontWeight: 600,
+            padding: fullscreen ? '12px 32px' : '8px 22px',
+            fontSize: fullscreen ? 15 : 13,
+            fontWeight: 600,
             fontFamily: "'Cinzel', serif", cursor: 'pointer',
           }}>
             Essential Only
