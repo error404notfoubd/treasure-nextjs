@@ -1,4 +1,4 @@
-import GAME_CONFIG from '@/lib/controls';
+import GAME_CONFIG from '@/lib/config';
 
 export async function GET() {
   const base = GAME_CONFIG.SITE.URL;

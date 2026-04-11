@@ -2,12 +2,12 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { checkRateLimitDistributed } from '@/lib/rateLimit';
 import { getClientIP } from '@/lib/ip';
-import { verifyToken } from '@/lib/token';
-import { checkVerificationCode } from '@/lib/preludeVerify';
+import { verifyToken } from '@/lib/survey/token';
+import { checkVerificationCode } from '@/lib/survey/prelude';
 import {
   getSurveySessionToken,
   buildSurveySessionClearCookie,
-} from '@/lib/surveySession';
+} from '@/lib/survey/survey-session';
 
 export const runtime = 'nodejs';
 

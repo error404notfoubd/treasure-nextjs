@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { checkRateLimitDistributed } from '@/lib/rateLimit';
 import { getClientIP } from '@/lib/ip';
-import { verifyToken } from '@/lib/token';
-import { sendVerificationSms, isPreludeConfigured } from '@/lib/preludeVerify';
+import { verifyToken } from '@/lib/survey/token';
+import { sendVerificationSms, isPreludeConfigured } from '@/lib/survey/prelude';
 import {
   getSurveySessionToken,
   buildSurveySessionClearCookie,
-} from '@/lib/surveySession';
-import { smsSendRateLimitOptions, resendRouteRateLimitOptions, otpResendCooldownSec } from '@/lib/surveyRateLimits';
-import { isMissingOtpLastSentAtColumn } from '@/lib/otpColumn';
+} from '@/lib/survey/survey-session';
+import { smsSendRateLimitOptions, resendRouteRateLimitOptions, otpResendCooldownSec } from '@/lib/survey/rate-limits';
+import { isMissingOtpLastSentAtColumn } from '@/lib/survey/otp-column';
 
 export const runtime = 'nodejs';
 

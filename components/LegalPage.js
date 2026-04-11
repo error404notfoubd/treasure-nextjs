@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import GAME_CONFIG from '@/lib/controls';
+import GAME_CONFIG from '@/lib/config';
 
 export default function LegalPage({ title, intro, sections, lastUpdated }) {
   const { SITE } = GAME_CONFIG;

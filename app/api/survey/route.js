@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import { supabase }     from '@/lib/supabase';
-import { validateSurvey, VALID_FREQUENCIES } from '@/lib/validation';
+import { validateSurvey, VALID_FREQUENCIES } from '@/lib/survey/validation';
 import { checkRateLimitDistributed } from '@/lib/rateLimit';
 import { getClientIP }   from '@/lib/ip';
-import { createVerificationToken } from '@/lib/token';
+import { createVerificationToken } from '@/lib/survey/token';
 import { toE164 } from '@/lib/phoneE164';
-import { sendVerificationSms, isPreludeConfigured } from '@/lib/preludeVerify';
-import { buildSurveySessionSetCookie } from '@/lib/surveySession';
-import { smsSendRateLimitOptions, otpResendCooldownSec } from '@/lib/surveyRateLimits';
-import { isMissingOtpLastSentAtColumn } from '@/lib/otpColumn';
+import { sendVerificationSms, isPreludeConfigured } from '@/lib/survey/prelude';
+import { buildSurveySessionSetCookie } from '@/lib/survey/survey-session';
+import { smsSendRateLimitOptions, otpResendCooldownSec } from '@/lib/survey/rate-limits';
+import { isMissingOtpLastSentAtColumn } from '@/lib/survey/otp-column';
+import GAME_CONFIG from '@/lib/config';
 
 export const runtime = 'nodejs';
 
@@ -43,7 +44,7 @@ export async function POST(request) {
   }
 
   const raw = JSON.stringify(body);
-  if (raw.length > 8192) {
+  if (raw.length > GAME_CONFIG.SURVEY_API.REQUEST_BODY_MAX_CHARS) {
     return NextResponse.json({ error: 'Request too large.' }, { status: 413 });
   }
 

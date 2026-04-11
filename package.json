@@ -5,7 +5,10 @@
   "packageManager": "pnpm@10.33.0",
   "pnpm": {
     "confirmModulesPurge": false,
-    "onlyBuiltDependencies": ["sharp", "unrs-resolver"]
+    "onlyBuiltDependencies": [
+      "sharp",
+      "unrs-resolver"
+    ]
   },
   "scripts": {
     "dev": "next dev --turbopack",
@@ -15,8 +18,9 @@
   },
   "dependencies": {
     "@prelude.so/sdk": "^0.10.0",
+    "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.39.0",
-    "next": "^15.2.4",
+    "next": "16.2.3",
     "react": "^19",
     "react-dom": "^19"
   },
@@ -24,7 +28,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.20",
     "eslint": "^9",
-    "eslint-config-next": "^15.2.4"
+    "eslint-config-next": "16.2.3",
+    "postcss": "^8.4.40",
+    "tailwindcss": "^3.4.17"
   }
 }

@@ -127,6 +127,20 @@ BEGIN
 END;
 $$;
 
+-- When a profile row is removed, remove the Auth user so auth.users stays in sync.
+-- (Deleting auth.users already CASCADE-deletes the profile via FK; this covers the reverse.)
+CREATE OR REPLACE FUNCTION public.handle_profile_deleted()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM auth.users WHERE id = OLD.id;
+  RETURN OLD;
+END;
+$$;
+
 
 -- ── Triggers ─────────────────────────────────
 CREATE OR REPLACE TRIGGER on_profile_updated
@@ -138,6 +152,12 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
+
+DROP TRIGGER IF EXISTS on_profile_deleted ON public.profiles;
+CREATE TRIGGER on_profile_deleted
+  AFTER DELETE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_profile_deleted();
 
 
 -- ── RLS + Policies ───────────────────────────
