@@ -106,6 +106,14 @@ export async function POST(request) {
       .eq('verified', false);
 
     if (updateError) {
+      if (updateError.code === '23505') {
+        const res = NextResponse.json(
+          { error: 'This email or phone number has already been verified. Thank you!' },
+          { status: 409 }
+        );
+        res.headers.append('Set-Cookie', buildSurveySessionClearCookie());
+        return res;
+      }
       console.error('[survey/verify update]', updateError.message ?? updateError);
       return NextResponse.json({ error: 'Could not save verification. Please try again.' }, { status: 500 });
     }

@@ -23,6 +23,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.survey_responses
     WHERE lower(email) = lower(p_email)
+      AND verified = true
   );
 $$;
 
@@ -37,6 +38,7 @@ AS $$
     SELECT 1 FROM public.survey_responses
     WHERE regexp_replace(phone, '[^0-9+]', '', 'g') =
           regexp_replace(p_phone, '[^0-9+]', '', 'g')
+      AND verified = true
   );
 $$;
 

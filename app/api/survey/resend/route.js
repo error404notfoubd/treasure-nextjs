@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { checkRateLimitDistributed } from '@/lib/rateLimit';
 import { getClientIP } from '@/lib/ip';
 import { verifyToken } from '@/lib/survey/token';
-import { sendVerificationSms, isPreludeConfigured } from '@/lib/survey/prelude';
+import { sendVerificationSms, isPreludeConfigured, userMessageForPreludeSendFailure } from '@/lib/survey/prelude';
 import {
   getSurveySessionToken,
   buildSurveySessionClearCookie,
@@ -119,9 +119,13 @@ export async function POST(request) {
     }
 
     if (!preludeResult.ok) {
+      const httpStatus = preludeResult.preludeStatus === 'blocked' ? 403 : 422;
       return NextResponse.json(
-        { error: 'We could not send a verification code. Please try again later.' },
-        { status: 422 }
+        {
+          error: userMessageForPreludeSendFailure(preludeResult),
+          verificationStatus: preludeResult.preludeStatus || 'unknown',
+        },
+        { status: httpStatus }
       );
     }
 
@@ -143,11 +147,18 @@ export async function POST(request) {
       }
     }
 
+    const verificationStatus = preludeResult.status;
+    const message =
+      verificationStatus === 'retry'
+        ? 'The same code was resent. Check your messages.'
+        : 'A new code was sent.';
+
     return NextResponse.json(
       {
         success: true,
         cooldownSec,
-        message: 'A new code was sent.',
+        verificationStatus,
+        message,
       },
       { status: 200 }
     );

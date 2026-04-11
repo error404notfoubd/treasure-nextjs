@@ -759,14 +759,13 @@ export default function SlotGame({ config }) {
       if (data.ok && data.verified) {
         setSurveyDone(true);
         setSurveyModalStep('success');
-      } else if (data.ok && data.pendingVerification) {
-        setSurveyModalStep('otp');
       } else {
         setSurveyModalStep('form');
       }
     } catch {
       setSurveyModalStep('form');
     }
+    setFormErrors([]);
     setModalOpen(true);
   }
 
@@ -1119,10 +1118,7 @@ export default function SlotGame({ config }) {
                       setFormPhoneNationalDigits(d);
                     }}
                   />
-                </div>
-                <p id="survey-phone-hint" className="phone-field-hint">
-                  Country code is fixed — enter your mobile number without repeating it.
-                </p>
+                </div>          
               </div>
               <div className="field">
                 <label>How often do you play online games?</label>
@@ -1134,7 +1130,7 @@ export default function SlotGame({ config }) {
               <div className="consent-row">
                 <input type="checkbox" id="f-consent" checked={formConsent} onChange={e=>setFormConsent(e.target.checked)}/>
                 <label htmlFor="f-consent">
-                  I consent to being contacted about my submission and to the use of my data as described in our <Link href="/privacy">Privacy Policy</Link>.
+                  I consent to being contacted about my submission and and to the use of my survey data as described in our <Link href="/privacy">Privacy Policy</Link>.
                 </label>
               </div>
               <button className="submit-btn" disabled={submitting} onClick={handleSubmit}>

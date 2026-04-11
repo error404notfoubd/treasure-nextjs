@@ -2,7 +2,7 @@ import MetaPixelGate from '@/components/game/MetaPixelGate';
 import '../globals.css';
 
 export const metadata = {
-  title:       'Treasure Hunt Slots — Free Play',
+  title:       'Treasure Hunt — Free to Play',
   description: 'Spin for free in the ancient treasure hunt slot game.',
   robots:      'noindex, nofollow',
   appleWebApp: {

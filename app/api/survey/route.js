@@ -5,7 +5,7 @@ import { checkRateLimitDistributed } from '@/lib/rateLimit';
 import { getClientIP }   from '@/lib/ip';
 import { createVerificationToken } from '@/lib/survey/token';
 import { toE164 } from '@/lib/phoneE164';
-import { sendVerificationSms, isPreludeConfigured } from '@/lib/survey/prelude';
+import { sendVerificationSms, isPreludeConfigured, userMessageForPreludeSendFailure } from '@/lib/survey/prelude';
 import { buildSurveySessionSetCookie } from '@/lib/survey/survey-session';
 import { smsSendRateLimitOptions, otpResendCooldownSec } from '@/lib/survey/rate-limits';
 import { isMissingOtpLastSentAtColumn } from '@/lib/survey/otp-column';
@@ -151,48 +151,85 @@ export async function POST(request) {
       );
     }
 
-    // Save row first, then SMS — if DB failed after SMS (old order), users got a code but no session.
-    // If Prelude fails after insert, we delete the row so "no user without working flow" still holds.
-    const sentAt = new Date().toISOString();
-    const { data: inserted, error: insertError } = await supabase
-      .from('survey_responses')
-      .insert({
-        name:       cleanName,
-        email:      emailForDb,
-        phone:      e164,
-        frequency:  cleanFreq || null,
-        ip_address: ip,
-        user_agent: userAgent,
-        verified:   false,
-      })
-      .select('id')
-      .single();
+    // If an unverified row already exists for this phone, update it in place
+    // instead of creating a duplicate. Otherwise insert a fresh row.
+    const rowPayload = {
+      name:       cleanName,
+      email:      emailForDb,
+      phone:      e164,
+      frequency:  cleanFreq || null,
+      ip_address: ip,
+      user_agent: userAgent,
+      verified:   false,
+    };
 
-    if (insertError) {
-      if (insertError.code === '23505') {
+    const sentAt = new Date().toISOString();
+    let rowId;
+    let isUpdate = false;
+
+    const { data: existingRow } = await supabase
+      .from('survey_responses')
+      .select('id')
+      .eq('phone', e164)
+      .eq('verified', false)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingRow) {
+      rowId = existingRow.id;
+      const { data: updated, error: updateError } = await supabase
+        .from('survey_responses')
+        .update({ ...rowPayload, submitted_at: new Date().toISOString() })
+        .eq('id', rowId)
+        .eq('verified', false)
+        .select('id')
+        .maybeSingle();
+
+      if (updateError) {
+        if (updateError.code === '23514') {
+          console.error('[survey POST constraint]', updateError.message, updateError.details);
+          return NextResponse.json(
+            { errors: ['Please check your details (e.g. use a valid email or leave email empty).'] },
+            { status: 422 }
+          );
+        }
+        throw updateError;
+      }
+
+      if (updated) {
+        isUpdate = true;
+      } else {
         return NextResponse.json(
-          {
-            error:
-              'This submission could not be saved. You may have already registered with this email or phone number.',
-          },
+          { error: 'This phone number has just been verified. Thank you for participating!' },
           { status: 409 }
         );
       }
-      if (insertError.code === '23514') {
-        console.error('[survey POST constraint]', insertError.message, insertError.details);
-        return NextResponse.json(
-          {
-            errors: [
-              'Please check your details (e.g. use a valid email or leave email empty).',
-            ],
-          },
-          { status: 422 }
-        );
-      }
-      throw insertError;
-    }
+    } else {
+      const { data: inserted, error: insertError } = await supabase
+        .from('survey_responses')
+        .insert(rowPayload)
+        .select('id')
+        .single();
 
-    const rowId = inserted.id;
+      if (insertError) {
+        if (insertError.code === '23505') {
+          return NextResponse.json(
+            { error: 'This submission could not be saved. You may have already registered with this email or phone number.' },
+            { status: 409 }
+          );
+        }
+        if (insertError.code === '23514') {
+          console.error('[survey POST constraint]', insertError.message, insertError.details);
+          return NextResponse.json(
+            { errors: ['Please check your details (e.g. use a valid email or leave email empty).'] },
+            { status: 422 }
+          );
+        }
+        throw insertError;
+      }
+      rowId = inserted.id;
+    }
 
     let preludeResult;
     try {
@@ -200,9 +237,11 @@ export async function POST(request) {
     } catch (e) {
       const errMsg = String(e?.message ?? e);
       console.error('[survey POST Prelude create]', errMsg);
-      const { error: delErr } = await supabase.from('survey_responses').delete().eq('id', rowId);
-      if (delErr) {
-        console.error('[survey POST rollback delete after Prelude failure]', delErr.message ?? delErr);
+      if (!isUpdate) {
+        const { error: delErr } = await supabase.from('survey_responses').delete().eq('id', rowId);
+        if (delErr) {
+          console.error('[survey POST rollback delete after Prelude failure]', delErr.message ?? delErr);
+        }
       }
       const rateLimited =
         errMsg.includes('429') ||
@@ -218,17 +257,13 @@ export async function POST(request) {
     }
 
     if (!preludeResult.ok) {
-      const { error: delErr } = await supabase.from('survey_responses').delete().eq('id', rowId);
-      if (delErr) {
-        console.error('[survey POST rollback delete after Prelude blocked]', delErr.message ?? delErr);
+      if (!isUpdate) {
+        const { error: delErr } = await supabase.from('survey_responses').delete().eq('id', rowId);
+        if (delErr) {
+          console.error('[survey POST rollback delete after Prelude blocked]', delErr.message ?? delErr);
+        }
       }
-      const reason = preludeResult.reason;
-      const msg =
-        reason === 'invalid_phone_number' || reason === 'invalid_phone_line'
-          ? 'This phone number cannot receive SMS codes. Please use a mobile number.'
-          : reason === 'in_block_list'
-            ? 'This number cannot be verified. Please use a different phone number.'
-            : 'We could not send a verification code. Please try again later.';
+      const msg = userMessageForPreludeSendFailure(preludeResult);
       return NextResponse.json({ error: msg }, { status: 422 });
     }
 
@@ -258,6 +293,7 @@ export async function POST(request) {
         success: true,
         needsVerification: true,
         otpCooldownSec: otpResendCooldownSec(),
+        verificationStatus: preludeResult.status,
         message: 'Enter the code we sent to your phone to finish and claim your bonus.',
       },
       { status: 201 }

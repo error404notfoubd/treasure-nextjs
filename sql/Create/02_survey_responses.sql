@@ -103,12 +103,21 @@ END $$;
 
 
 -- ── Indexes ──────────────────────────────────
-CREATE UNIQUE INDEX IF NOT EXISTS idx_survey_email
+-- Only verified rows enforce uniqueness; unverified duplicates are allowed
+-- so users can retry with the same email/phone before completing OTP.
+DROP INDEX IF EXISTS idx_survey_email;
+CREATE UNIQUE INDEX idx_survey_email
   ON public.survey_responses (lower(email))
-  WHERE email IS NOT NULL;
+  WHERE email IS NOT NULL AND verified = true;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_survey_phone
-  ON public.survey_responses (regexp_replace(phone, '[^0-9+]', '', 'g'));
+DROP INDEX IF EXISTS idx_survey_phone;
+CREATE UNIQUE INDEX idx_survey_phone
+  ON public.survey_responses (regexp_replace(phone, '[^0-9+]', '', 'g'))
+  WHERE verified = true;
+
+CREATE INDEX IF NOT EXISTS idx_survey_phone_unverified
+  ON public.survey_responses (phone)
+  WHERE verified = false;
 
 CREATE INDEX IF NOT EXISTS idx_survey_submitted_at
   ON public.survey_responses (submitted_at DESC);
