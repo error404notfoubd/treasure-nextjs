@@ -18,9 +18,9 @@ const CSRF_COOKIE = '_csrf';
 const CSRF_HEADER = 'x-csrf-token';
 const SESSION_COOKIE = '_sid';
 
-// ── Host allowlist: one optional apex domain + one optional local host ─────
+// ── Host allowlist: comma-separated apex domains + one optional local host ────
 /** Strip scheme/path/port; lowercase. For production apex, strip one leading `www.`. */
-function normalizeAllowedDomain(raw) {
+function normalizeOneApex(raw) {
   if (!raw) return '';
   let s = raw.trim().toLowerCase();
   s = s.replace(/^https?:\/\//, '');
@@ -28,6 +28,12 @@ function normalizeAllowedDomain(raw) {
   s = s.split(':')[0];
   if (s.startsWith('www.')) s = s.slice(4);
   return s;
+}
+
+/** Parse comma-separated domain list into an array of normalized apex domains. */
+function normalizeAllowedDomains(raw) {
+  if (!raw) return [];
+  return raw.split(',').map(normalizeOneApex).filter(Boolean);
 }
 
 function normalizeLocalHostLabel(raw) {
@@ -39,11 +45,11 @@ function normalizeLocalHostLabel(raw) {
   return s;
 }
 
-/** `apex` is normalized (e.g. example.com). Allows apex, www, and any subdomain. */
-function hostMatchesApex(hostBare, apex) {
-  if (!apex) return false;
+/** Check if host matches any of the allowed apex domains (apex, www, or any subdomain). */
+function hostMatchesApex(hostBare, apexList) {
+  if (!apexList.length) return false;
   const h = hostBare.toLowerCase();
-  return h === apex || h.endsWith(`.${apex}`);
+  return apexList.some((apex) => h === apex || h.endsWith(`.${apex}`));
 }
 
 /**
@@ -67,21 +73,21 @@ function hostMatchesLocal(hostBare, localLabel) {
   return h === localLabel || h.endsWith(`.${localLabel}`);
 }
 
-function hostAllowed(hostBare, apex, localLabel) {
+function hostAllowed(hostBare, apexList, localLabel) {
   return (
-    (apex && hostMatchesApex(hostBare, apex)) ||
+    hostMatchesApex(hostBare, apexList) ||
     (localLabel && hostMatchesLocal(hostBare, localLabel))
   );
 }
 
 /** Origin/referer URL must use http(s) and a hostname allowed by apex or local rules. */
-function originAllowed(originLowercase, apex, localLabel) {
+function originAllowed(originLowercase, apexList, localLabel) {
   if (!originLowercase) return true;
   try {
     const u = new URL(originLowercase);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
     const h = u.hostname.toLowerCase();
-    return hostAllowed(h, apex, localLabel);
+    return hostAllowed(h, apexList, localLabel);
   } catch {
     return false;
   }
@@ -173,9 +179,9 @@ function isDashboardCsrfApi(pathname) {
 let _hostWarningLogged = false;
 
 export async function proxy(request) {
-  const allowedApex = normalizeAllowedDomain(process.env.ALLOWED_DOMAIN || '');
+  const allowedApexList = normalizeAllowedDomains(process.env.ALLOWED_DOMAIN || '');
   const localLabel = normalizeLocalHostLabel(process.env.LOCAL_ALLOWED_HOST || '');
-  const enforceHosts = Boolean(allowedApex || localLabel);
+  const enforceHosts = Boolean(allowedApexList.length || localLabel);
 
   if (!enforceHosts && process.env.NODE_ENV === 'production' && !_hostWarningLogged) {
     _hostWarningLogged = true;
@@ -190,7 +196,7 @@ export async function proxy(request) {
   const onRealDashboard = isRealDashboardHost(hostBare);
 
   if (enforceHosts) {
-    if (!hostAllowed(hostBare, allowedApex, localLabel)) {
+    if (!hostAllowed(hostBare, allowedApexList, localLabel)) {
       const hostFull = (request.headers.get('host') || '').toLowerCase();
       console.warn(
         `[proxy] blocked — host="${hostFull}" not allowed by ALLOWED_DOMAIN / LOCAL_ALLOWED_HOST`
@@ -199,7 +205,7 @@ export async function proxy(request) {
     }
 
     const requestOrigin = originFromHeader(request);
-    if (requestOrigin && !originAllowed(requestOrigin, allowedApex, localLabel)) {
+    if (requestOrigin && !originAllowed(requestOrigin, allowedApexList, localLabel)) {
       console.warn(
         `[proxy] blocked — origin="${requestOrigin}" to ${pathname}`
       );
@@ -245,16 +251,14 @@ export async function proxy(request) {
 
   const dashOrigin = getDerivedDashboardOrigin(request);
 
-  // ── Dashboard routes only on dashboard.* (redirect from apex / www / localhost) ─
+  // ── Dashboard routes only on dashboard.* — block (not redirect) from other hosts ─
   if (!onRealDashboard && isDashboardOnlyPath(pathname)) {
-    const target = `${dashOrigin}${pathname}${search}`;
-    return NextResponse.redirect(target);
+    return new NextResponse('Not Found', { status: 404 });
   }
 
-  // ── Marketing/legal pages live on the main site only ────────────────────
+  // ── Marketing/legal pages only on the main site — block from dashboard host ───
   if (onRealDashboard && (pathname === '/terms' || pathname === '/privacy')) {
-    const main = mainOriginFromRequest(request);
-    return NextResponse.redirect(`${main}${pathname}${search}`);
+    return new NextResponse('Not Found', { status: 404 });
   }
 
   let response = NextResponse.next({ request: { headers: request.headers } });
