@@ -120,15 +120,16 @@ export default function ResponsesPage() {
   };
 
   const totalPages = Math.ceil(total / perPage);
+  const tableColCount = 7 + (canEdit || canDelete || canVerify ? 1 : 0);
 
   return (
     <>
       {/* Topbar */}
-      <div className="sticky top-0 z-10 bg-surface-1 border-b border-surface-3/50 px-7 py-4 flex items-center justify-between gap-4">
-        <h2 className="text-lg font-bold tracking-tight">Leads</h2>
-        <div className="flex items-center gap-3">
+      <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-surface-3/50 bg-surface-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-4 lg:px-7">
+        <h2 className="text-base font-bold tracking-tight sm:text-lg">Leads</h2>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <button
-            className="btn btn-ghost btn-sm gap-1.5"
+            className="btn btn-ghost btn-sm w-fit gap-1.5"
             onClick={fetchData}
             disabled={loading}
             title="Refresh data"
@@ -136,12 +137,12 @@ export default function ResponsesPage() {
             <IconRefresh size={14} className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
-          <div className="flex items-center gap-2 bg-surface-2 border border-surface-4 rounded-lg px-3 py-2 focus-within:border-accent transition-colors">
-            <IconSearch className="text-ink-4" />
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-surface-4 bg-surface-2 px-3 py-2 transition-colors focus-within:border-accent sm:max-w-md sm:flex-initial">
+            <IconSearch className="flex-shrink-0 text-ink-4" />
             <input
               type="text"
               placeholder="Search name, email, phone…"
-              className="bg-transparent border-none outline-none text-ink-1 text-sm w-[220px] placeholder:text-ink-4 font-sans"
+              className="min-w-0 flex-1 border-none bg-transparent font-sans text-sm text-ink-1 outline-none placeholder:text-ink-4 sm:w-[220px] sm:flex-none"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             />
@@ -149,9 +150,9 @@ export default function ResponsesPage() {
         </div>
       </div>
 
-      <div className="flex-1 p-7 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-7">
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
           {loading ? (
             <>
               <SkeletonStatCard />
@@ -171,7 +172,13 @@ export default function ResponsesPage() {
               <StatCard
                 label="Verified"
                 value={stats.verified}
-                valueColor={stats.verified > 0 ? "text-accent" : "text-ink-4"}
+                valueColor={
+                  stats.total === 0
+                    ? "text-ink-4"
+                    : stats.verified === 0
+                      ? "text-danger"
+                      : "text-accent"
+                }
                 sub={stats.total > 0 ? `${Math.round((stats.verified / stats.total) * 100)}% of total` : undefined}
               />
             </>
@@ -180,7 +187,7 @@ export default function ResponsesPage() {
 
         {/* Table */}
         <div className="card overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-surface-3 flex items-center justify-between">
+          <div className="flex flex-col gap-1 border-b border-surface-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-3.5">
             <h3 className="text-sm font-semibold">Survey Responses</h3>
             <span className="text-xs text-ink-4">{total} total</span>
           </div>
@@ -190,21 +197,21 @@ export default function ResponsesPage() {
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Email</th>
                   <th>Phone</th>
+                  <th>Email</th>
+                  <th>Verified</th>
                   <th>Frequency</th>
                   <th>Status</th>
-                  <th>Verified</th>
                   <th>Submitted</th>
                   {(canEdit || canDelete || canVerify) && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <SkeletonTableRows rows={8} cols={(canEdit || canDelete || canVerify) ? 8 : 7} />
+                  <SkeletonTableRows rows={8} cols={tableColCount} />
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-16 text-ink-4">
+                    <td colSpan={tableColCount} className="text-center py-16 text-ink-4">
                       No records found
                     </td>
                   </tr>
@@ -212,8 +219,15 @@ export default function ResponsesPage() {
                   data.map((row) => (
                     <tr key={row.id}>
                       <td className="font-semibold text-ink-1">{row.name}</td>
-                      <td className="text-ink-2">{row.email || "—"}</td>
                       <td className="font-mono text-xs text-ink-2">{row.phone}</td>
+                      <td className="text-ink-2">{row.email || "—"}</td>
+                      <td>
+                        <span
+                          className={`badge ${row.verified ? "bg-accent/10 text-accent" : "bg-danger-muted text-danger"}`}
+                        >
+                          {row.verified ? "✓ Verified" : "Unverified"}
+                        </span>
+                      </td>
                       <td>
                         {row.frequency ? (
                           <span className="badge bg-surface-3 text-ink-2">{row.frequency}</span>
@@ -222,11 +236,6 @@ export default function ResponsesPage() {
                       <td>
                         <span className={`badge ${row.is_flagged ? "bg-danger-muted text-danger" : "bg-success-muted text-success"}`}>
                           {row.is_flagged ? "⚑ Flagged" : "✓ Clean"}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${row.verified ? "bg-accent/10 text-accent" : "bg-surface-3 text-ink-4"}`}>
-                          {row.verified ? "✓ Verified" : "Unverified"}
                         </span>
                       </td>
                       <td className="font-mono text-[11px] text-ink-4">
@@ -247,7 +256,7 @@ export default function ResponsesPage() {
                             )}
                             {canVerify && (
                               <button
-                                className={`p-1.5 rounded-md transition-colors ${row.verified ? "text-accent hover:text-danger hover:bg-danger-muted" : "text-ink-4 hover:text-accent hover:bg-accent/10"}`}
+                                className={`p-1.5 rounded-md transition-colors ${row.verified ? "text-accent hover:bg-danger-muted hover:text-danger" : "text-danger hover:bg-accent/10 hover:text-accent"}`}
                                 title={row.verified ? "Remove verification" : "Mark as verified"}
                                 onClick={() => setVerifyRow(row)}
                               >
@@ -270,11 +279,11 @@ export default function ResponsesPage() {
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between px-5 py-3 border-t border-surface-3">
+          <div className="flex flex-col gap-3 border-t border-surface-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <span className="text-xs text-ink-4">
               {data.length} of {total} records
             </span>
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 className="btn btn-ghost btn-sm"
                 disabled={page === 0}

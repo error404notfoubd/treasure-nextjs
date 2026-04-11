@@ -88,8 +88,8 @@ export default function UsersPage() {
 
   return (
     <>
-      <div className="sticky top-0 z-10 bg-surface-1 border-b border-surface-3/50 px-7 py-4 flex items-center justify-between">
-        <h2 className="text-lg font-bold tracking-tight">User Management</h2>
+      <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-surface-3/50 bg-surface-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4 lg:px-7">
+        <h2 className="text-base font-bold tracking-tight sm:text-lg">User Management</h2>
         <button
           className="btn btn-ghost btn-sm gap-1.5"
           onClick={fetchUsers}
@@ -101,9 +101,9 @@ export default function UsersPage() {
         </button>
       </div>
 
-      <div className="flex-1 p-7 overflow-y-auto space-y-6">
+      <div className="flex-1 space-y-6 overflow-y-auto p-4 sm:p-6 lg:p-7">
         {/* Role Cards */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {loading ? (
             Array.from({ length: 4 }).map((_, i) => <SkeletonRoleCard key={i} />)
           ) : (
@@ -137,7 +137,7 @@ export default function UsersPage() {
 
         {/* Users Table */}
         <div className="card overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-surface-3 flex items-center justify-between">
+          <div className="flex flex-col gap-1 border-b border-surface-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-3.5">
             <h3 className="text-sm font-semibold">Dashboard Users</h3>
             <span className="text-xs text-ink-4">{profiles.length} users</span>
           </div>

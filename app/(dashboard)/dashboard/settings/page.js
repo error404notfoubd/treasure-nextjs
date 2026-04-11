@@ -12,18 +12,18 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div className="sticky top-0 z-10 bg-surface-1 border-b border-surface-3/50 px-7 py-4">
-        <h2 className="text-lg font-bold tracking-tight">Settings</h2>
+      <div className="sticky top-0 z-10 border-b border-surface-3/50 bg-surface-1 px-4 py-3 sm:px-6 sm:py-4 lg:px-7">
+        <h2 className="text-base font-bold tracking-tight sm:text-lg">Settings</h2>
       </div>
 
-      <div className="flex-1 p-7 overflow-y-auto">
-        <div className="max-w-xl space-y-5">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-7">
+        <div className="mx-auto max-w-xl space-y-5">
           {/* Session Info */}
           <div className="card overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-surface-3">
+            <div className="border-b border-surface-3 px-4 py-3 sm:px-5 sm:py-3.5">
               <h3 className="text-sm font-semibold">Your Session</h3>
             </div>
-            <div className="px-5 py-4 space-y-3">
+            <div className="space-y-3 px-4 py-4 sm:px-5">
               <Row label="Email" value={user?.email} mono />
               <Row label="Name" value={user?.fullName || "—"} />
               <Row label="User ID" value={user?.id} mono small />
@@ -87,10 +87,10 @@ function ChangePasswordCard() {
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-surface-3">
+      <div className="border-b border-surface-3 px-4 py-3 sm:px-5 sm:py-3.5">
         <h3 className="text-sm font-semibold">Change Password</h3>
       </div>
-      <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4 px-4 py-4 sm:px-5">
         <div>
           <label className="label">Current Password</label>
           <input

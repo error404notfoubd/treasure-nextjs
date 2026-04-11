@@ -1,9 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { IconUsers, IconShield, IconActivity, IconSettings, IconLogout, IconClock } from "@/components/icons";
+import {
+  IconUsers,
+  IconShield,
+  IconActivity,
+  IconSettings,
+  IconLogout,
+  IconClock,
+} from "@/components/icons";
 import { apiFetch } from "@/lib/dashboard/api-client";
 import { ROLES, getRoleLevel } from "@/lib/roles";
+import { useDashboardSidebar } from "@/components/dashboard/layout-context";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Leads", icon: IconUsers, minLevel: 10 },
@@ -13,9 +22,15 @@ const NAV_ITEMS = [
   { href: "/dashboard/settings", label: "Settings", icon: IconSettings, minLevel: 10 },
 ];
 
+function isWideScreen() {
+  if (typeof window === "undefined") return true;
+  return window.matchMedia("(min-width: 1024px)").matches;
+}
+
 export default function Sidebar({ user }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { sidebarOpen, setSidebarOpen } = useDashboardSidebar();
   const roleLevel = getRoleLevel(user?.role);
   const role = ROLES[user?.role] || ROLES.viewer;
 
@@ -30,65 +45,111 @@ export default function Sidebar({ user }) {
     return pathname.startsWith(href);
   };
 
+  useEffect(() => {
+    if (!isWideScreen()) {
+      setSidebarOpen(false);
+    }
+  }, [pathname, setSidebarOpen]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape" && sidebarOpen && !isWideScreen()) {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen, setSidebarOpen]);
+
+  const navTo = (href) => {
+    router.push(href);
+    if (!isWideScreen()) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const showMobileBackdrop = sidebarOpen && !isWideScreen();
+
   return (
-    <aside className="w-[240px] bg-surface-1 border-r border-surface-3/50 flex flex-col flex-shrink-0 sticky top-0 h-screen">
-      {/* Brand */}
-      <div className="px-5 py-6 border-b border-surface-3/50">
-        <h1 className="text-[15px] font-bold tracking-tight">Treasure Hunt</h1>
-        <span className="text-[11px] text-ink-4 font-medium uppercase tracking-widest mt-1 block">
-          Management Console
-        </span>
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-3 space-y-0.5">
-        {NAV_ITEMS.filter((item) => roleLevel >= item.minLevel).map((item) => {
-          const Icon = item.icon;
-          const active = isActive(item.href);
-          return (
-            <button
-              key={item.href}
-              onClick={() => router.push(item.href)}
-              className={`
-                w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium
-                transition-all duration-150 border-none cursor-pointer text-left
-                ${active
-                  ? "bg-accent-muted text-accent"
-                  : "text-ink-2 hover:bg-surface-3/60 hover:text-ink-1"
-                }
-              `}
-            >
-              <Icon size={17} />
-              {item.label}
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* User */}
-      <div className="px-3 py-4 border-t border-surface-3/50">
-        <div className="flex items-center gap-2.5 px-2">
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0"
-            style={{ background: role.color }}
-          >
-            {(user?.fullName || user?.email || "?")[0].toUpperCase()}
+    <div className="relative flex h-screen w-0 flex-shrink-0 lg:w-auto lg:min-w-0">
+      {showMobileBackdrop && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 z-40 bg-black/45 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      <aside
+        id="dashboard-sidebar"
+        className={`
+          fixed left-0 top-0 z-50 flex h-screen w-[min(280px,88vw)] flex-shrink-0 flex-col border-r border-surface-3/50 bg-surface-1
+          transition-[transform,width] duration-200 ease-out
+          lg:relative lg:z-auto lg:min-h-0 lg:max-w-none lg:translate-x-0
+          ${sidebarOpen ? "translate-x-0 lg:w-[240px]" : "-translate-x-full lg:translate-x-0 lg:w-0 lg:min-w-0 lg:overflow-hidden lg:border-r-0"}
+        `}
+        aria-hidden={!sidebarOpen}
+      >
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* Brand */}
+          <div className="border-b border-surface-3/50 px-5 py-6">
+            <h1 className="text-[15px] font-bold tracking-tight">Treasure Hunt</h1>
+            <span className="mt-1 block text-[11px] font-medium uppercase tracking-widest text-ink-4">
+              Management Console
+            </span>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-semibold truncate">
-              {user?.fullName || user?.email}
+
+          {/* Nav */}
+          <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
+            {NAV_ITEMS.filter((item) => roleLevel >= item.minLevel).map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item.href);
+              return (
+                <button
+                  key={item.href}
+                  type="button"
+                  onClick={() => navTo(item.href)}
+                  className={`
+                    flex w-full items-center gap-2.5 rounded-lg border-none px-3 py-2.5 text-left text-[13px] font-medium
+                    transition-all duration-150
+                    ${active
+                      ? "bg-accent-muted text-accent"
+                      : "cursor-pointer text-ink-2 hover:bg-surface-3/60 hover:text-ink-1"
+                    }
+                  `}
+                >
+                  <Icon size={17} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* User */}
+          <div className="border-t border-surface-3/50 px-3 py-4">
+            <div className="flex items-center gap-2.5 px-2">
+              <div
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
+                style={{ background: role.color }}
+              >
+                {(user?.fullName || user?.email || "?")[0].toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-semibold">{user?.fullName || user?.email}</div>
+                <div className="text-[11px] capitalize text-ink-4">{role.label}</div>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Sign out"
+                className="rounded-md p-1.5 text-ink-4 transition-colors hover:bg-danger-muted hover:text-danger"
+              >
+                <IconLogout />
+              </button>
             </div>
-            <div className="text-[11px] text-ink-4 capitalize">{role.label}</div>
           </div>
-          <button
-            onClick={handleLogout}
-            title="Sign out"
-            className="p-1.5 rounded-md text-ink-4 hover:text-danger hover:bg-danger-muted transition-colors"
-          >
-            <IconLogout />
-          </button>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </div>
   );
 }

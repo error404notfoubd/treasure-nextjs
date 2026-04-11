@@ -60,8 +60,8 @@ export default function AuditPage() {
 
   return (
     <>
-      <div className="sticky top-0 z-10 bg-surface-1 border-b border-surface-3/50 px-7 py-4 flex items-center justify-between">
-        <h2 className="text-lg font-bold tracking-tight">Audit Log</h2>
+      <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-surface-3/50 bg-surface-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4 lg:px-7">
+        <h2 className="text-base font-bold tracking-tight sm:text-lg">Audit Log</h2>
         <button
           className="btn btn-ghost btn-sm gap-1.5"
           onClick={fetchAudit}
@@ -73,14 +73,14 @@ export default function AuditPage() {
         </button>
       </div>
 
-      <div className="flex-1 p-7 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-7">
         <div className="card overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-surface-3 flex items-center justify-between">
+          <div className="flex flex-col gap-1 border-b border-surface-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-3.5">
             <h3 className="text-sm font-semibold">Activity Trail</h3>
             <span className="text-xs text-ink-4">Last 100 entries</span>
           </div>
 
-          <div className="px-5 py-3">
+          <div className="px-4 py-3 sm:px-5">
             {loading ? (
               <div className="space-y-0">
                 {Array.from({ length: 10 }).map((_, i) => (

@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
-import Sidebar from "@/components/dashboard/sidebar";
 import { ToastProvider } from "@/components/toast";
 import DashboardClient from "./dashboard-client";
 import PendingApproval from "./pending-approval";
@@ -22,10 +21,7 @@ export default async function DashboardLayout({ children }) {
 
   return (
     <ToastProvider>
-      <div className="flex min-h-screen bg-surface-0">
-        <Sidebar user={user} />
-        <DashboardClient user={user}>{children}</DashboardClient>
-      </div>
+      <DashboardClient user={user}>{children}</DashboardClient>
     </ToastProvider>
   );
 }

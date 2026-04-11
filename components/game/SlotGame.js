@@ -5,6 +5,22 @@ import Link from 'next/link';
 import { validateSurvey, VALID_FREQUENCIES } from '@/lib/survey/validation';
 import { toE164 } from '@/lib/phoneE164';
 
+/** Display grouping for NANP national digits (after fixed +1). */
+function formatNanpNationalDisplay(digits) {
+  const d = String(digits).replace(/\D/g, '').slice(0, 10);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)} ${d.slice(3)}`;
+  return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
+}
+
+/** Build full number for validation/API: E.164 country code + national digits. */
+function composeSurveyPhoneE164(countryCode, nationalDigits) {
+  const nd = String(nationalDigits).replace(/\D/g, '');
+  let cc = String(countryCode || '+1').trim();
+  if (!cc.startsWith('+')) cc = `+${cc.replace(/\D/g, '')}`;
+  else cc = `+${cc.slice(1).replace(/\D/g, '')}`;
+  return `${cc}${nd}`;
+}
 
 // ══════════════════════════════════════════════
 //  CANVAS HELPERS
@@ -120,6 +136,7 @@ export default function SlotGame({ config }) {
     BET_PRESETS,
     REEL_STOP_DELAYS,
     SLOT_UI,
+    SURVEY_DEFAULT_COUNTRY_CODE: surveyCountryCode = '+1',
   } = config;
 
   const { SYM_H, STRIP, HYDRATION_DELAY_MS } = SLOT_UI;
@@ -148,7 +165,8 @@ export default function SlotGame({ config }) {
   // Survey form state
   const [formName, setFormName]       = useState('');
   const [formEmail, setFormEmail]     = useState('');
-  const [formPhone, setFormPhone]     = useState('');
+  /** National digits only (fixed country code shown separately in the UI). */
+  const [formPhoneNationalDigits, setFormPhoneNationalDigits] = useState('');
   const [formFreq, setFormFreq]       = useState('');
   const [formConsent, setFormConsent] = useState(false);
   const [formErrors, setFormErrors]   = useState([]);
@@ -754,10 +772,11 @@ export default function SlotGame({ config }) {
 
   // ── Survey submit ──
   async function handleSubmit() {
-    const errors = validateSurvey({ name:formName, email:formEmail, phone:formPhone, frequency:formFreq, consent:formConsent });
+    const fullPhone = composeSurveyPhoneE164(surveyCountryCode, formPhoneNationalDigits);
+    const errors = validateSurvey({ name:formName, email:formEmail, phone:fullPhone, frequency:formFreq, consent:formConsent });
     if (errors.length > 0) { setFormErrors(errors); return; }
-    if (!toE164(formPhone)) {
-      setFormErrors(['Please include country code (e.g. +1 555 000 0000).']);
+    if (!toE164(fullPhone)) {
+      setFormErrors(['Please enter a valid mobile number (10 digits after the country code).']);
       return;
     }
     setFormErrors([]); setSubmitting(true);
@@ -765,7 +784,7 @@ export default function SlotGame({ config }) {
       const res = await fetch('/api/survey', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name:formName, email:formEmail, phone:formPhone, frequency:formFreq, consent:String(formConsent) }),
+        body: JSON.stringify({ name:formName, email:formEmail, phone:fullPhone, frequency:formFreq, consent:String(formConsent) }),
         credentials: 'include',
       });
       const data = await res.json();
@@ -1084,9 +1103,26 @@ export default function SlotGame({ config }) {
                   value={formEmail} onChange={e=>setFormEmail(e.target.value)}/>
               </div>
               <div className="field">
-                <label>Phone number (with country code)</label>
-                <input type="tel" placeholder="+1 555 000 0000" autoComplete="tel"
-                  value={formPhone} onChange={e=>setFormPhone(e.target.value)}/>
+                <label htmlFor="survey-phone-national">Phone number</label>
+                <div className="phone-input-wrap" role="group" aria-label="Phone number">
+                  <span className="phone-cc">{surveyCountryCode}</span>
+                  <input
+                    id="survey-phone-national"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    placeholder="555 000 0000"
+                    aria-describedby="survey-phone-hint"
+                    value={formatNanpNationalDisplay(formPhoneNationalDigits)}
+                    onChange={(e) => {
+                      const d = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setFormPhoneNationalDigits(d);
+                    }}
+                  />
+                </div>
+                <p id="survey-phone-hint" className="phone-field-hint">
+                  Country code is fixed — enter your mobile number without repeating it.
+                </p>
               </div>
               <div className="field">
                 <label>How often do you play online games?</label>

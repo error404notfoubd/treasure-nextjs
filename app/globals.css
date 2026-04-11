@@ -644,6 +644,28 @@ body{
 .field input:focus,.field select:focus{border-color:var(--gold);box-shadow:0 0 12px rgba(200,146,10,.22);}
 .field select option{background:#100c04;}
 .field input::placeholder{color:rgba(200,146,10,.22);}
+.phone-input-wrap{
+  display:flex;align-items:stretch;width:100%;
+  background:#080600;border:1px solid rgba(200,146,10,.22);border-radius:8px;
+  overflow:hidden;min-height:48px;
+}
+.phone-input-wrap .phone-cc{
+  flex-shrink:0;display:flex;align-items:center;padding:0 10px 0 14px;
+  font-family:var(--font-body);font-size:clamp(14px,4vw,16px);color:var(--gold2);
+  border-right:1px solid rgba(200,146,10,.22);background:rgba(0,0,0,.28);
+  letter-spacing:.03em;
+}
+.phone-input-wrap input{
+  flex:1;min-width:0;border:none!important;border-radius:0!important;
+  background:transparent!important;box-shadow:none!important;
+  min-height:48px;padding:12px 12px 12px 10px!important;
+}
+.phone-input-wrap:focus-within{
+  border-color:var(--gold);box-shadow:0 0 12px rgba(200,146,10,.22);
+}
+.phone-field-hint{
+  margin:6px 0 0;font-size:clamp(9px,2.5vw,10px);color:rgba(176,144,96,.85);line-height:1.4;
+}
 .consent-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;}
 .consent-row input[type=checkbox]{
   width:20px;height:20px;margin-top:2px;accent-color:var(--gold);flex-shrink:0;
