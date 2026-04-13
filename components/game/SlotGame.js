@@ -36,91 +36,56 @@ function roundRectPath(ctx, x, y, w, h, r) {
   ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
 }
 // ══════════════════════════════════════════════
-//  SYMBOL SVGs — crisp vector icons
+//  Reel symbols — assets in /public/game/ (chest.svg is UI-only on chests, not a reel icon)
 // ══════════════════════════════════════════════
-const SYM_SVG = {
-  seven: `<svg viewBox="0 0 56 64" xmlns="http://www.w3.org/2000/svg">
-    <text x="28" y="52" text-anchor="middle" font-family="Georgia,serif" font-weight="900" font-style="italic" font-size="56"
-      fill="#c62828" stroke="#3b0a0a" stroke-width="2.5" paint-order="stroke">7</text>
-    <rect x="10" y="25" width="30" height="4" rx="1" fill="#fdd835" opacity=".55" transform="rotate(-8 25 27)"/>
-  </svg>`,
-
-  diamond: `<svg viewBox="0 0 48 52" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <clipPath id="dc"><polygon points="24,2 46,18 24,50 2,18"/></clipPath>
-      <style>@keyframes dshimmer{0%,100%{opacity:0;transform:translateX(-20px)}40%,60%{opacity:.55}50%{transform:translateX(28px)}}</style>
-    </defs>
-    <polygon points="24,2 46,18 24,50 2,18" fill="#4fc3f7" stroke="#0d47a1" stroke-width="2" stroke-linejoin="round"/>
-    <line x1="2" y1="18" x2="46" y2="18" stroke="#0d47a1" stroke-width="1.2"/>
-    <polyline points="15,18 24,2 33,18" fill="none" stroke="#0d47a1" stroke-width="1"/>
-    <polyline points="15,18 24,50 33,18" fill="none" stroke="#0d47a1" stroke-width="1"/>
-    <polygon points="24,2 33,18 24,18" fill="rgba(255,255,255,.28)"/>
-    <polygon points="2,18 24,50 15,18" fill="rgba(255,255,255,.1)"/>
-    <g clip-path="url(#dc)">
-      <rect x="0" y="-2" width="14" height="56" rx="3" fill="rgba(255,255,255,.45)" style="animation:dshimmer 3s ease-in-out infinite" transform="rotate(15 24 26)"/>
-    </g>
-    <circle cx="30" cy="10" r="2.5" fill="rgba(255,255,255,.5)"><animate attributeName="opacity" values=".2;.7;.2" dur="2.2s" repeatCount="indefinite"/></circle>
-    <circle cx="12" cy="22" r="1.5" fill="rgba(255,255,255,.4)"><animate attributeName="opacity" values=".1;.5;.1" dur="1.8s" repeatCount="indefinite"/></circle>
-  </svg>`,
-
-  bell: `<svg viewBox="0 0 48 56" xmlns="http://www.w3.org/2000/svg">
-    <path d="M24,8 C35,8 39,20 39,36 L41,40 L7,40 L9,36 C9,20 13,8 24,8Z" fill="#fbc02d" stroke="#5d4037" stroke-width="2" stroke-linejoin="round"/>
-    <rect x="7" y="40" width="34" height="5" rx="2" fill="#f9a825" stroke="#5d4037" stroke-width="1.5"/>
-    <circle cx="24" cy="50" r="3.5" fill="#f57f17" stroke="#5d4037" stroke-width="1.5"/>
-    <rect x="21" y="2" width="6" height="7" rx="2" fill="#f9a825" stroke="#5d4037" stroke-width="1.5"/>
-    <path d="M17,14 C18,14 19,26 19,38 L14,38 C14,26 15,14 17,14Z" fill="rgba(255,255,255,.18)"/>
-  </svg>`,
-
-  gold: `<svg viewBox="0 0 52 48" xmlns="http://www.w3.org/2000/svg">
-    <rect x="2" y="32" width="48" height="13" rx="2" fill="#f9a825" stroke="#5d4037" stroke-width="1.5"/>
-    <rect x="6" y="19" width="40" height="13" rx="2" fill="#fbc02d" stroke="#5d4037" stroke-width="1.5"/>
-    <rect x="10" y="6" width="32" height="13" rx="2" fill="#fdd835" stroke="#5d4037" stroke-width="1.5"/>
-    <text x="26" y="15" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700" font-size="7" fill="#5d4037" opacity=".5">GOLD</text>
-  </svg>`,
-
-  cherry: `<svg viewBox="0 0 48 52" xmlns="http://www.w3.org/2000/svg">
-    <path d="M24,10 Q16,16 14,26" fill="none" stroke="#2e7d32" stroke-width="2.5" stroke-linecap="round"/>
-    <path d="M24,10 Q32,16 34,26" fill="none" stroke="#2e7d32" stroke-width="2.5" stroke-linecap="round"/>
-    <path d="M24,8 Q33,2 36,9 Q34,15 24,11Z" fill="#43a047" stroke="#2e7d32" stroke-width="1"/>
-    <circle cx="14" cy="36" r="11" fill="#e53935" stroke="#7f1d1d" stroke-width="1.8"/>
-    <circle cx="34" cy="36" r="11" fill="#e53935" stroke="#7f1d1d" stroke-width="1.8"/>
-    <ellipse cx="10" cy="31" rx="3.5" ry="4.5" fill="rgba(255,255,255,.22)" transform="rotate(-20 10 31)"/>
-    <ellipse cx="30" cy="31" rx="3.5" ry="4.5" fill="rgba(255,255,255,.22)" transform="rotate(-20 30 31)"/>
-  </svg>`,
-
-  bar: `<svg viewBox="0 0 52 36" xmlns="http://www.w3.org/2000/svg">
-    <rect x="2" y="2" width="48" height="32" rx="5" fill="#455a64" stroke="#1b2a33" stroke-width="2"/>
-    <rect x="5" y="5" width="42" height="26" rx="3" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
-    <text x="26" y="24" text-anchor="middle" font-family="Georgia,serif" font-weight="900" font-size="18"
-      fill="#eceff1" stroke="#1b2a33" stroke-width=".6" paint-order="stroke">BAR</text>
-  </svg>`,
-
-  coin: `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <clipPath id="cc"><circle cx="24" cy="24" r="21"/></clipPath>
-      <style>@keyframes cshimmer{0%,100%{opacity:0;transform:translateX(-22px)}40%,60%{opacity:.5}50%{transform:translateX(26px)}}</style>
-    </defs>
-    <circle cx="24" cy="24" r="21" fill="#fbc02d" stroke="#5d4037" stroke-width="2"/>
-    <circle cx="24" cy="24" r="16" fill="none" stroke="#8d6e13" stroke-width="1.5"/>
-    <text x="24" y="31" text-anchor="middle" font-family="Georgia,serif" font-weight="900" font-size="22" fill="#5d4037">$</text>
-    <ellipse cx="17" cy="15" rx="8" ry="9" fill="rgba(255,255,255,.15)" transform="rotate(-25 17 15)"/>
-    <g clip-path="url(#cc)">
-      <rect x="0" y="-4" width="12" height="56" rx="3" fill="rgba(255,255,255,.4)" style="animation:cshimmer 3.5s ease-in-out infinite" transform="rotate(20 24 24)"/>
-    </g>
-    <circle cx="14" cy="12" r="2" fill="rgba(255,255,255,.45)"><animate attributeName="opacity" values=".15;.6;.15" dur="2s" repeatCount="indefinite"/></circle>
-  </svg>`,
+const SYM_GAME_FILES = {
+  key: 'key.svg',
+  crystal: 'diamond.svg',
+  map: 'map.svg',
+  compass: 'compass.svg',
+  shield: 'shield.svg',
+  scroll: 'scroll.svg',
+  star: 'star.svg',
 };
+const SYM_ALT = {
+  key: 'Key',
+  crystal: 'Crystal',
+  map: 'Map',
+  compass: 'Compass',
+  shield: 'Shield',
+  scroll: 'Scroll',
+  star: 'Star',
+};
+const SYM_SVG = Object.fromEntries(
+  Object.entries(SYM_GAME_FILES).map(([id, file]) => [
+    id,
+    `<img src="/game/${file}" alt="${SYM_ALT[id] ?? id}"/>`,
+  ]),
+);
 
 const SYMS = [
-  { id:'seven',  w:4  },
-  { id:'diamond',w:8  },
-  { id:'bell',   w:12 },
-  { id:'gold',   w:16 },
-  { id:'cherry', w:18 },
-  { id:'bar',    w:20 },
-  { id:'coin',   w:22 },
+  { id: 'key',     w: 28 },
+  { id: 'crystal', w: 24 },
+  { id: 'map',     w: 20 },
+  { id: 'compass', w: 16 },
+  { id: 'shield',  w: 12 },
+  { id: 'scroll',  w: 9 },
+  { id: 'star',    w: 6 },
 ];
-const MULT5 = {}; // populated from config in component
+
+/** Labels for Discovery Guide treasure rows (sorted by payout in buildPaytable). */
+const PAYTABLE_TREASURE_LABELS = {
+  key: 'Key × 5',
+  crystal: 'Crystal × 5',
+  map: 'Map × 5',
+  compass: 'Compass × 5',
+  shield: 'Shield × 5',
+  scroll: 'Scroll × 5',
+  star: 'Star × 5',
+};
+
+/** Per-symbol bet multipliers for a 5-match (treasure find). */
+const TREASURE_FIND_MULT = {};
 
 // ══════════════════════════════════════════════
 //  MAIN COMPONENT
@@ -133,21 +98,31 @@ export default function SlotGame({ config }) {
     START_CREDITS: startCredits,
     BONUS_CREDITS: bonusCredits,
     SYMBOL_WEIGHTS,
-    PAYOUTS,
+    FIND_PAYOUTS,
     BET_PRESETS,
     REEL_STOP_DELAYS,
     SLOT_UI,
     SURVEY_DEFAULT_COUNTRY_CODE: surveyCountryCode = '+1',
   } = config;
 
-  const { SYM_H, STRIP, HYDRATION_DELAY_MS } = SLOT_UI;
+  const { HYDRATION_DELAY_MS } = SLOT_UI;
 
-  // Apply symbol weights and payouts from config
+  // Symbol tier weights: higher → rarer reel (1/w probability) and higher treasure-find multiplier.
   SYMS.forEach(s => { s.w = SYMBOL_WEIGHTS[s.id] ?? s.w; });
-  const TOTAL_W = SYMS.reduce((a,s) => a + s.w, 0);
-  Object.assign(MULT5, PAYOUTS?.five_of_a_kind ?? { seven:100, diamond:50, bell:20, cherry:15, gold:10, bar:6, coin:3 });
-  const PAYOUT_4 = PAYOUTS?.four_of_a_kind  ?? 4;
-  const PAYOUT_3 = PAYOUTS?.three_of_a_kind ?? 2;
+  const invWeights = SYMS.map(s => ({ id: s.id, inv: 1 / Math.max(s.w, 1e-9) }));
+  const TOTAL_INV_REEL = invWeights.reduce((a, x) => a + x.inv, 0);
+  const wMin = Math.min(...SYMS.map(s => s.w));
+  const wMax = Math.max(...SYMS.map(s => s.w));
+  const TREASURE_MIN = 3;
+  const TREASURE_MAX = 100;
+  for (const s of SYMS) {
+    TREASURE_FIND_MULT[s.id] =
+      wMax > wMin
+        ? Math.round(TREASURE_MIN + ((s.w - wMin) / (wMax - wMin)) * (TREASURE_MAX - TREASURE_MIN))
+        : Math.round((TREASURE_MIN + TREASURE_MAX) / 2);
+  }
+  const GREAT_FIND_MULT = FIND_PAYOUTS?.great_find ?? 4;
+  const GOOD_FIND_MULT = FIND_PAYOUTS?.good_find ?? 2;
 
   // Game state
   const [credits, setCredits]   = useState(startCredits);
@@ -157,7 +132,7 @@ export default function SlotGame({ config }) {
   const [wins, setWins]         = useState(0);
   const [bestWin, setBestWin]   = useState(0);
   const [spinning, setSpinning] = useState(false);
-  const [winMsg, setWinMsg]     = useState('Spin to seek your fortune!');
+  const [winMsg, setWinMsg]     = useState('Play to seek your treasure!');
   const [msgType, setMsgType]   = useState('idle');
   const [isMega, setIsMega]     = useState(false);
   const [surveyDone, setSurveyDone] = useState(false);
@@ -241,9 +216,8 @@ export default function SlotGame({ config }) {
     if (symsInitRef.current) return;
     symsInitRef.current = true;
     startCoinAnim('load-coin', 22);
-    buildAllStrips();
+    initChests();
     buildGemRow();
-    buildCornerGems();
     buildPaytable();
     animateCoin();
     initBgCanvas();
@@ -251,31 +225,23 @@ export default function SlotGame({ config }) {
     initParticleCanvas();
   }, []);
 
-  // strips are only built once on init — never rebuilt
-
   // ── Symbol helpers ──
   function pickRand() {
-    let r = Math.random() * TOTAL_W, cum = 0;
-    for (const s of SYMS) { cum += s.w; if (r < cum) return s.id; }
+    let r = Math.random() * TOTAL_INV_REEL;
+    let cum = 0;
+    for (const { id, inv } of invWeights) {
+      cum += inv;
+      if (r < cum) return id;
+    }
     return SYMS[SYMS.length - 1].id;
   }
-  function makeCellEl(id) {
-    const cell = document.createElement('div'); cell.className = 'sym-cell';
-    cell.dataset.sym = id;
-    cell.innerHTML = SYM_SVG[id] || '';
-    return cell;
-  }
-  function buildAllStrips() {
+  function initChests() {
     for (let i = 0; i < 5; i++) {
-      const track = document.getElementById('rt' + i);
-      if (!track) continue;
-      track.innerHTML = '';
-      for (let j = 0; j < STRIP; j++) {
-        const cell = makeCellEl(pickRand());
-        track.appendChild(cell);
-      }
-      track.style.transform = 'translateY(0px)';
-      track.style.filter = 'none';
+      const chest = document.getElementById('r' + i);
+      const reveal = document.getElementById('rt' + i);
+      if (!chest || !reveal) continue;
+      chest.classList.remove('shaking', 'opening', 'unlocking', 'win', 'win-pop', 'compass-win');
+      reveal.innerHTML = '';
     }
   }
 
@@ -337,16 +303,22 @@ export default function SlotGame({ config }) {
     loop();
   }
 
-  // ── Paytable ──
+  // ── Paytable (Discovery Guide) — highest payout first ──
   function buildPaytable() {
     const grid = document.getElementById('ptgrid'); if (!grid) return;
     grid.innerHTML = '';
-    const rows = [
-      {sym:'seven',label:'7 × 5',mult:100},{sym:'diamond',label:'Diamond × 5',mult:50},
-      {sym:'bell',label:'Bell × 5',mult:20},{sym:'cherry',label:'Cherry × 5',mult:15},
-      {sym:'gold',label:'Gold × 5',mult:10},{sym:'bar',label:'BAR × 5',mult:6},
-      {sym:null,label:'Any 4 match',mult:4},{sym:null,label:'Any 3 match',mult:2},
+    const treasureRows = SYMS.map(s => ({
+      sym: s.id,
+      label: PAYTABLE_TREASURE_LABELS[s.id] || `${s.id} × 5`,
+      mult: TREASURE_FIND_MULT[s.id],
+    }));
+    const metaRows = [
+      { sym: null, label: 'Great find', mult: GREAT_FIND_MULT },
+      { sym: null, label: 'Good find', mult: GOOD_FIND_MULT },
     ];
+    const rows = [...treasureRows, ...metaRows].sort(
+      (a, b) => b.mult - a.mult || String(a.label).localeCompare(String(b.label)),
+    );
     rows.forEach(row => {
       const div=document.createElement('div');div.className='pt-row';
       const sym=document.createElement('span');sym.className='pt-sym';
@@ -372,7 +344,7 @@ export default function SlotGame({ config }) {
       g.addColorStop(0,'#fffce0');g.addColorStop(.35,'#f8c820');g.addColorStop(.7,'#c89000');g.addColorStop(1,'#805000');
       ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
       ctx.strokeStyle='rgba(160,110,0,.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(cx,cy,r-3,0,Math.PI*2);ctx.stroke();
-      ctx.fillStyle='#604000';ctx.font=`bold ${Math.round(size*.75*pulse)}px Georgia,serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('$',cx,cy+.5);
+      ctx.fillStyle='#604000';ctx.font=`bold ${Math.round(size*.75*pulse)}px Georgia,serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('★',cx,cy+.5);
       const sg=ctx.createRadialGradient(cx-3,cy-4,1,cx-2,cy-3,r*.5);
       sg.addColorStop(0,'rgba(255,255,255,.8)');sg.addColorStop(1,'rgba(255,255,255,0)');
       ctx.fillStyle=sg;ctx.beginPath();ctx.arc(cx-2,cy-3,r*.45,0,Math.PI*2);ctx.fill();
@@ -395,7 +367,7 @@ export default function SlotGame({ config }) {
       g.addColorStop(0,'#fffce0');g.addColorStop(.35,'#f8c820');g.addColorStop(.7,'#c89000');g.addColorStop(1,'#805000');
       ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
       ctx.strokeStyle='rgba(160,110,0,.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(cx,cy,r-3,0,Math.PI*2);ctx.stroke();
-      ctx.fillStyle='#604000';ctx.font=`bold ${10*pulse}px Georgia,serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('$',cx,cy+.5);
+      ctx.fillStyle='#604000';ctx.font=`bold ${10*pulse}px Georgia,serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('★',cx,cy+.5);
       const sg=ctx.createRadialGradient(cx-3,cy-4,1,cx-2,cy-3,r*.5);
       sg.addColorStop(0,'rgba(255,255,255,.8)');sg.addColorStop(1,'rgba(255,255,255,0)');
       ctx.fillStyle=sg;ctx.beginPath();ctx.arc(cx-2,cy-3,r*.45,0,Math.PI*2);ctx.fill();
@@ -511,7 +483,10 @@ export default function SlotGame({ config }) {
   function pickResult() {
     const isWin = Math.random() * 100 < rtp;
     const isJP  = isWin && Math.random() * 100 < jackpotRate;
-    if (isJP) { const j=['bell','cherry','gold','bar','coin'][Math.floor(Math.random()*5)]; return [j,j,j,j,j]; }
+    if (isJP) {
+      const j = ['key', 'crystal', 'map', 'shield', 'scroll', 'star'][Math.floor(Math.random() * 6)];
+      return [j, j, j, j, j];
+    }
     if (isWin) {
       const is4 = Math.random() * 100 < (fourRate ?? 15); const sym = pickRand();
       const res = [sym,sym,sym];
@@ -522,46 +497,33 @@ export default function SlotGame({ config }) {
     return Array.from({length:5},()=>pickRand());
   }
 
-  function spinEase(t) {
-    if (t < .65) return t/.65;
-    const p=(t-.65)/.35;return 1+.024*Math.sin(p*Math.PI*2.4)*Math.pow(1-p,2.3);
-  }
-
-  function animReel(idx, targetId, dur, onDone) {
-    const track = document.getElementById('rt'+idx); if (!track) return;
-    const cells = track.querySelectorAll('.sym-cell');
-    const landIdx = STRIP-4;
-    const landCell = cells[landIdx];
-    if (landCell) {
-      landCell.dataset.sym = targetId;
-      landCell.innerHTML = SYM_SVG[targetId] || '';
-    }
-    const totalDist=(Math.floor(dur/180)*STRIP+landIdx)*SYM_H;
-    const start=performance.now();let lastY=0;
-    function frame(now){
-      const t=Math.min((now-start)/dur,1);const eased=spinEase(t);
-      const rawY=-(eased*totalDist);const y=((rawY%(STRIP*SYM_H))-(STRIP*SYM_H))%(STRIP*SYM_H);
-      track.style.transform=`translateY(${y}px)`;
-      const speed=Math.abs(y-lastY);
-      track.style.filter=t<.7?`blur(${Math.min(speed*.22,4.5).toFixed(1)}px)`:`blur(${Math.max(0,2*(1-(t-.7)/.3)).toFixed(1)}px)`;
-      lastY=y;
-      if(t<1){requestAnimationFrame(frame);}
-      else{
-        track.style.filter='none';track.style.transform=`translateY(${-(landIdx*SYM_H)}px)`;
-        const r=document.getElementById('r'+idx);if(r){r.style.borderColor='rgba(200,146,10,.55)';setTimeout(()=>{r.style.borderColor='';},75);}
-        if(onDone) onDone();
-      }
-    }
-    requestAnimationFrame(frame);
+  function animChest(idx, targetId, dur, onDone) {
+    const chest = document.getElementById('r' + idx);
+    const reveal = document.getElementById('rt' + idx);
+    if (!chest || !reveal) return;
+    chest.classList.remove('opening', 'unlocking', 'win', 'win-pop', 'compass-win');
+    reveal.innerHTML = '';
+    chest.classList.add('shaking');
+    setTimeout(() => {
+      chest.classList.remove('shaking');
+      chest.classList.add('unlocking');
+      setTimeout(() => {
+        chest.classList.remove('unlocking');
+        reveal.innerHTML = SYM_SVG[targetId] || '';
+        void reveal.offsetWidth;
+        chest.classList.add('opening');
+        if (onDone) setTimeout(onDone, 550);
+      }, 480);
+    }, dur);
   }
 
   const SPIN_MSGS = [
-    'The reels are turning...',
-    'Fortune favours the bold...',
+    'The chests are rattling...',
+    'Bold explorers press on...',
     'Seeking ancient treasure...',
     'The cave awakens...',
     'Gold dust in the air...',
-    'Spinning the wheel of fate...',
+    'Ancient locks trembling...',
     'Digging deep...',
     'The spirits stir...',
     'Your destiny unfolds...',
@@ -570,38 +532,39 @@ export default function SlotGame({ config }) {
     'Riches await the brave...',
     'Unearthing the vault...',
     'The gold calls to you...',
-    'Chasing the jackpot...',
+    'Chasing the legend...',
   ];
 
   const IDLE_MSGS = [
-    'Spin to seek your fortune!',
+    'Play to seek your treasure!',
+    'What will you discover?',
     'The treasure awaits...',
     'Will you be the one?',
-    'Gold lies within these reels...',
-    'Dare to spin again?',
+    'Secrets lie within these chests...',
+    'Dare to explore again?',
     'The cave holds many secrets...',
-    'Try your luck, adventurer!',
-    'Riches beyond measure await...',
+    'Onward, adventurer!',
+    'Wonders beyond measure await...',
     'The ancient vault beckons...',
-    'Fortune favours the fearless!',
+    'The fearless find more...',
   ];
 
   const MISS_MSGS = [
-    'Not this time... spin again!',
+    'Not this time... play again!',
     'So close! Try once more.',
-    'The spirits demand another spin!',
+    'The spirits demand another play!',
     'Keep digging, treasure is near!',
     'Almost had it... go again!',
     'The vault stays sealed... for now.',
-    'Dust and pebbles... spin again!',
+    'Dust and pebbles... play again!',
     'No match — but luck is turning!',
     'The torches flicker... try again!',
-    'The gods are watching. Spin!',
+    'The gods are watching. Play!',
     'Empty-handed... but not for long!',
-    'The cave teases... one more spin!',
+    'The cave teases... one more play!',
     'Close, but the gold eludes you!',
     'Not yet, adventurer. Try again!',
-    'Better luck next spin!',
+    'Better luck next play!',
   ];
 
   function randomFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -624,7 +587,7 @@ export default function SlotGame({ config }) {
   const doSpin = useCallback(() => {
     const currentCredits = creditsRef.current;
     const currentBet = betRef.current;
-    if (currentCredits < currentBet) { setWinMsg('NOT ENOUGH GOLD'); setMsgType('miss'); setIsMega(false); return; }
+    if (currentCredits < currentBet) { setWinMsg('NOT ENOUGH COINS FOR THIS SEARCH'); setMsgType('miss'); setIsMega(false); return; }
     setSpinning(true);
     setCredits(c => c - currentBet);
     setSpins(s => s + 1);
@@ -638,7 +601,7 @@ export default function SlotGame({ config }) {
     startSpinMessages();
     const result = pickResult(); let done = 0;
     const durs = REEL_STOP_DELAYS ?? [860,1100,1340,1580,1820];
-    for (let i=0;i<5;i++) animReel(i, result[i], durs[i], () => { done++; if(done===5) setTimeout(()=>finalizeResult(result,currentBet),80); });
+    for (let i=0;i<5;i++) animChest(i, result[i], durs[i], () => { done++; if(done===5) setTimeout(()=>finalizeResult(result,currentBet),80); });
   }, []);
 
   function triggerBounce(selector, cls, duration) {
@@ -659,15 +622,16 @@ export default function SlotGame({ config }) {
     const max=Math.max(...Object.values(cnt));
     const top=Object.keys(cnt).find(k=>cnt[k]===max);
     let win=0,msg='',type='miss';
-    if(max===5){win=usedBet*(MULT5[top]??100);msg=top==='seven'?'JACKPOT! +'+win:'FIVE OF A KIND! +'+win;type='mega';setIsMega(true);launchConfetti(120);sparkleWin(result,top);popoutWinSymbols(result,top);showCoinPop(win);}
-    else if(max===4){win=usedBet*PAYOUT_4;msg='FOUR OF A KIND! +'+win;type='win4';setIsMega(false);launchConfetti(50);sparkleWin(result,top);popoutWinSymbols(result,top);showCoinPop(win);}
-    else if(max===3){win=usedBet*PAYOUT_3;msg='THREE OF A KIND +'+win;type='win3';setIsMega(false);sparkleWin(result,top);popoutWinSymbols(result,top);}
+    if(max===5){win=usedBet*(TREASURE_FIND_MULT[top]??TREASURE_MAX);msg='TREASURE FIND! +'+win;type='treasure_find';setIsMega(true);launchConfetti(120);sparkleWin(result,top);popoutWinSymbols(result,top);showCoinPop(win);}
+    else if(max===4){win=usedBet*GREAT_FIND_MULT;msg='GREAT FIND! +'+win;type='great_find';setIsMega(false);launchConfetti(50);sparkleWin(result,top);popoutWinSymbols(result,top);showCoinPop(win);}
+    else if(max===3){win=usedBet*GOOD_FIND_MULT;msg='GOOD FIND! +'+win;type='good_find';setIsMega(false);sparkleWin(result,top);popoutWinSymbols(result,top);}
     else{msg=randomFrom(MISS_MSGS);type='miss';setIsMega(false);}
     if(win>0){
       setCredits(c=>c+win);setWins(w=>w+1);
       setBestWin(b=>Math.max(b,win));
       flashReels(result,top);
-      triggerBounce('.rw','win-flash',600);
+      tagCompassCelebration(result, top, max);
+      triggerBounce('.chest-row','win-flash',600);
       triggerBounce('.cval','win-bounce',600);
       setTimeout(() => {
         triggerBounce('.stat:nth-child(1) .sv','bump',400);
@@ -683,6 +647,18 @@ export default function SlotGame({ config }) {
   }
 
   function flashReels(result,sym){result.forEach((s,i)=>{if(s===sym){const r=document.getElementById('r'+i);if(r){r.classList.add('win');setTimeout(()=>r.classList.remove('win'),1600);}}});}
+
+  /** 3+ compass: mark winning chests so CSS can scale+spin the revealed compass */
+  function tagCompassCelebration(result, topSym, maxMatch) {
+    if (topSym !== 'compass' || maxMatch < 3) return;
+    result.forEach((s, i) => {
+      if (s !== topSym) return;
+      document.getElementById('r' + i)?.classList.add('compass-win');
+    });
+    setTimeout(() => {
+      document.querySelectorAll('.chest.compass-win').forEach((el) => el.classList.remove('compass-win'));
+    }, 2200);
+  }
 
   function sparkleWin(result,sym){
     const layer=document.getElementById('spl');const rwRect=document.getElementById('rw')?.getBoundingClientRect();
@@ -705,27 +681,17 @@ export default function SlotGame({ config }) {
   function clearSparkles(){const l=document.getElementById('spl');if(l)l.innerHTML='';}
 
   function clearPopouts(){
-    document.querySelectorAll('.popout-active').forEach(el=>el.classList.remove('popout-active'));
-    document.querySelectorAll('.sym-cell.popout').forEach(el=>{
-      el.classList.remove('popout','popout-bell','popout-coin','popout-diamond','popout-seven','popout-bar','popout-gold','popout-cherry');
-    });
+    document.querySelectorAll('.win-pop').forEach(el=>el.classList.remove('win-pop'));
+    document.querySelectorAll('.compass-win').forEach(el=>el.classList.remove('compass-win'));
   }
 
   function popoutWinSymbols(result,sym){
-    const landIdx=STRIP-4;
     result.forEach((s,i)=>{
       if(s!==sym)return;
-      const track=document.getElementById('rt'+i);
-      const reel=document.getElementById('r'+i);
-      if(!track||!reel)return;
-      const cell=track.querySelectorAll('.sym-cell')[landIdx];
-      if(!cell)return;
-      reel.classList.add('popout-active');
-      cell.classList.add('popout','popout-'+sym);
-      setTimeout(()=>{
-        cell.classList.remove('popout','popout-'+sym);
-        reel.classList.remove('popout-active');
-      },2000);
+      const chest=document.getElementById('r'+i);
+      if(!chest)return;
+      chest.classList.add('win-pop');
+      setTimeout(()=>chest.classList.remove('win-pop'),2000);
     });
   }
 
@@ -910,29 +876,27 @@ export default function SlotGame({ config }) {
         <div className="cbar">
           <canvas className="ccoin-wrap" id="coin-anim" width="28" height="28"/>
           <div>
-            <div className="clabel">Gold</div>
+            <div className="clabel">Coins</div>
             <div className="cval">{hydrated ? credits : '...'}</div>
           </div>
         </div>
 
         <div className="hero">
-          <div className="hero-eyebrow">Ancient Riches Await</div>
+          <div className="hero-eyebrow">Ancient Secrets Await</div>
           <h1>TREASURE<br/>HUNT</h1>
           <div className="gem-row" id="gem-row"/>
-          <div className="divider-line">Spin For Free</div>
+          <div className="divider-line">Begin Your Quest</div>
         </div>
 
         <div className="machine">
-          <div className="corner-gem-wrap tl"><canvas id="cgem-tl" width="22" height="22"/></div>
-          <div className="corner-gem-wrap tr"><canvas id="cgem-tr" width="22" height="22"/></div>
-          <div className="corner-gem-wrap bl"><canvas id="cgem-bl" width="22" height="22"/></div>
-          <div className="corner-gem-wrap br"><canvas id="cgem-br" width="22" height="22"/></div>
           <div className="machine-outer">
-            <div className="filigree top">- - - - - - - - - - - - - - -</div>
-            <div className="rw" id="rw">
+            <div className="chest-row" id="rw">
               {[0,1,2,3,4].map(i => (
-                <div className="reel" id={`r${i}`} key={i}>
-                  <div className="reel-track" id={`rt${i}`}/>
+                <div className="chest" id={`r${i}`} key={i}>
+                  <div className="chest-lid" id={`lid${i}`}/>
+                  <div className="chest-key"/>
+                  <div className="chest-body"/>
+                  <div className="chest-reveal" id={`rt${i}`}/>
                 </div>
               ))}
               <div className="sparkle-layer" id="spl"/>
@@ -940,48 +904,52 @@ export default function SlotGame({ config }) {
             <div className="win-row">
               <div id="wmsg" className={`wmsg show ${msgType}${isMega?' mega':''}`}>{winMsg}</div>
             </div>
-            <div className="filigree bot">- - - - - - - - - - - - - - -</div>
           </div>
         </div>
 
         <div className="controls">
-          <div className="stone-panel">
-            <div className="bet-top">
-              <span className="bet-title">Wager</span>
-              <span className="bet-display">{bet} gold</span>
-            </div>
-            <div className="bet-presets">
-              {(BET_PRESETS ?? [1,5,10,15,25,50]).map(v => (
-                <button key={v} className={`bp${bet===v?' act':''}`} onClick={()=>setBet(v)}>{v}</button>
+          <div className="stone-panel search-cost-panel">
+            <label className="bet-title search-cost-label" htmlFor="search-cost-select">Coins per search</label>
+            <select
+              id="search-cost-select"
+              className="search-cost-select"
+              value={bet}
+              onChange={(e) => setBet(Number(e.target.value))}
+              aria-label="Coins spent each time you explore"
+            >
+              {(BET_PRESETS ?? [1, 5, 10, 15, 25, 50]).map((v) => (
+                <option key={v} value={v}>
+                  {v} {v === 1 ? 'coin' : 'coins'} per search
+                </option>
               ))}
-            </div>
+            </select>
           </div>
 
           <div className="spin-wrap">
             <button className="sbtn" id="sbtn" disabled={spinning || credits <= 0} onClick={doSpin}>
-              {spinning ? 'SPINNING...' : 'SPIN TO WIN'}
+              {spinning ? 'SEARCHING...' : 'EXPLORE'}
             </button>
           </div>
         </div>
 
         <div className="stats-row">
-          <div className="stat"><div className="sl">Spins</div><div className="sv">{spins}</div></div>
-          <div className="stat"><div className="sl">Wins</div><div className="sv">{wins}</div></div>
-          <div className="stat"><div className="sl">Best Win</div><div className="sv">{bestWin}</div></div>
+          <div className="stat"><div className="sl">Searches</div><div className="sv">{spins}</div></div>
+          <div className="stat"><div className="sl">Finds</div><div className="sv">{wins}</div></div>
+          <div className="stat"><div className="sl">Best Find</div><div className="sv">{bestWin}</div></div>
         </div>
 
         {!surveyDone && (
           <div className={`survey-banner${credits <= 0 ? ' highlight' : ''}`}>
             <div className="sb-text">
-              <div className="sb-title">{credits <= 0 ? 'Out of Gold! Claim Now' : 'Claim Bonus Gold'}</div>
-              <div className="sb-sub">Take a quick survey &amp; earn <strong>{bonusCredits} bonus gold</strong> instantly</div>
+              <div className="sb-title">{credits <= 0 ? 'Out of coins? Unlock more' : 'Unlock bonus coins'}</div>
+              <div className="sb-sub">Take a quick survey and <strong>unlock {bonusCredits} bonus coins</strong> for your quest</div>
             </div>
-            <button className="signup-btn" onClick={openClaimModal}>Claim<br/>Reward</button>
+            <button className="signup-btn" onClick={openClaimModal}>Get coins</button>
           </div>
         )}
 
         <div className="paytable">
-          <div className="pt-title">Treasure Table</div>
+          <div className="pt-title">Discovery Guide</div>
           <div className="pt-grid" id="ptgrid"/>
         </div>
 
@@ -989,7 +957,7 @@ export default function SlotGame({ config }) {
 
         <div className="footer">
           Free game for entertainment only. No purchase required.<br/>
-          Gold credits have no cash value. Must be 21+ to play.<br/>
+          Coin credits have no cash value. Must be 21+ to play.<br/>
           <Link href="/terms">Terms &amp; Conditions</Link> &nbsp;|&nbsp; <Link href="/privacy">Privacy Policy</Link>
         </div>
       </div>
@@ -1007,8 +975,8 @@ export default function SlotGame({ config }) {
                 Your number is verified and your response is saved.<br/>
                 Thank you.
               </div>
-              <div className="success-sub" style={{ marginTop: '12px' }}>Gold added to your chest:</div>
-              <div className="bonus-pill">+{bonusCredits} Gold</div>
+              <div className="success-sub" style={{ marginTop: '12px' }}>Coins added to your chest:</div>
+              <div className="bonus-pill">+{bonusCredits} coins</div>
               <div className="helpline-card" style={{display:'none'}}>
                 <div className="helpline-title">Support Resources</div>
                 <div className="helpline-item">
@@ -1026,7 +994,7 @@ export default function SlotGame({ config }) {
                   <a className="helpline-link" href="https://www.gamcare.org.uk" target="_blank" rel="noreferrer">gamcare.org.uk</a>
                 </div>
               </div>
-              <div className="success-sub" style={{fontSize:'10px',color:'#6a5020'}}>Gold credits have no cash value and are for game use only.</div>
+              <div className="success-sub" style={{fontSize:'10px',color:'#6a5020'}}>Coin credits have no cash value and are for game use only.</div>
               <button className="submit-btn" style={{marginTop:'16px'}} onClick={()=>setModalOpen(false)}>Continue Quest</button>
             </div>
           ) : surveyModalStep === 'otp' ? (
@@ -1035,7 +1003,7 @@ export default function SlotGame({ config }) {
               <div className="modal-divider">Enter verification code</div>
               <div className="modal-sub">
                 We sent a code to the number you provided.<br/>
-                Enter it below to verify and claim your bonus.
+                Enter it below to verify and add coins to your game.
               </div>
               {formErrors.length > 0 && (
                 <div className="error-box">
@@ -1054,7 +1022,7 @@ export default function SlotGame({ config }) {
                 />
               </div>
               <button className="submit-btn" disabled={verifying} onClick={handleVerifyOtp}>
-                {verifying ? 'Verifying...' : 'Verify & claim bonus'}
+                {verifying ? 'Verifying...' : 'Verify & unlock coins'}
               </button>
               <button
                 type="button"
@@ -1085,9 +1053,9 @@ export default function SlotGame({ config }) {
             </div>
           ) : (
             <div className="form-state" id="form-state">
-              <div className="modal-title">Claim Your Gold</div>
+              <div className="modal-title">Unlock bonus coins</div>
               <div className="modal-divider">Gaming Survey</div>
-              <div className="modal-sub">Complete this survey &amp; receive<br/><strong>{bonusCredits} bonus gold</strong> added to your chest</div>
+              <div className="modal-sub">Complete this survey and we will add<br/><strong>{bonusCredits} bonus coins</strong> to your chest</div>
               <div className="survey-note" style={{display:'none'}}>
                 <strong>About this survey</strong>
                 This survey collects your name, email, and phone number so we can follow up with relevant gambling support resources and helpline information if appropriate.
@@ -1143,7 +1111,7 @@ export default function SlotGame({ config }) {
                 </label>
               </div>
               <button className="submit-btn" disabled={submitting} onClick={handleSubmit}>
-                {submitting ? 'Submitting...' : 'Claim Bonus & Submit'}
+                {submitting ? 'Submitting...' : 'Submit survey'}
               </button>
             </div>
           )}

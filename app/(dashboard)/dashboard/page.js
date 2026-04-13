@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useUser } from "./dashboard-client";
 import { useToast } from "@/components/toast";
 import { apiFetch } from "@/lib/dashboard/api-client";
-import { canEditData, canDeleteData, canVerifyData } from "@/lib/roles";
 import { IconSearch, IconEdit, IconFlag, IconTrash, IconChevLeft, IconChevRight, IconRefresh, IconShieldCheck } from "@/components/icons";
 import { SkeletonStatCard, SkeletonTableRows } from "@/components/skeleton";
 import Modal from "@/components/modal";
@@ -23,9 +22,10 @@ export default function ResponsesPage() {
   const [verifyRow, setVerifyRow] = useState(null);
   const perPage = 15;
 
-  const canEdit = canEditData(user?.role);
-  const canDelete = canDeleteData(user?.role);
-  const canVerify = canVerifyData(user?.role);
+  const perm = new Set(user?.permissions || []);
+  const canEdit = perm.has("edit_leads");
+  const canDelete = perm.has("delete_leads");
+  const canVerify = perm.has("verify_leads");
 
   const fetchData = useCallback(async () => {
     setLoading(true);

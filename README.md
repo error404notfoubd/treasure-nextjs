@@ -114,9 +114,11 @@ lib/
   dashboard/       # CSRF apiFetch, dashboard host checks (used by proxy + API routes)
   survey/          # Survey validation, OTP/session cookies, Prelude SMS, tokens
   …                # ip, roles, rateLimit, audit, phoneE164, …
-proxy.js           # Allowlist, subdomain routing, CSRF, auth cookies
+proxy.js           # Allowlist, subdomain routing, CSRF, auth cookies (Next.js 16+ Proxy middleware)
 sql/               # Postgres / Supabase definitions
 ```
+
+**Middleware:** This app uses **`proxy.js` only** (export `proxy` + `config`). Do **not** add a root **`middleware.js`** — Next.js will error if both files exist, and tooling that expects `middleware.js` should be pointed at **`proxy.js`** instead.
 
 ---
 

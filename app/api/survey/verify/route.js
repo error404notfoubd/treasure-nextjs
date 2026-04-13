@@ -8,6 +8,8 @@ import {
   getSurveySessionToken,
   buildSurveySessionClearCookie,
 } from '@/lib/survey/survey-session';
+import { resolvePhoneFromDb } from '@/lib/survey/contact-storage';
+import { FUNNEL_USERS_TABLE } from '@/lib/funnel-users';
 
 export const runtime = 'nodejs';
 
@@ -61,9 +63,9 @@ export async function POST(request) {
 
   try {
     const { data: row, error: fetchError } = await supabase
-      .from('survey_responses')
-      .select('id, phone, verified')
-      .eq('id', parsed.surveyResponseId)
+      .from(FUNNEL_USERS_TABLE)
+      .select('user_id, phone_encrypted, verified_at')
+      .eq('user_id', parsed.surveyResponseId)
       .single();
 
     if (fetchError || !row) {
@@ -72,15 +74,15 @@ export async function POST(request) {
       return res;
     }
 
-    if (row.verified === true) {
+    if (row.verified_at != null) {
       const res = NextResponse.json({ success: true, verified: true }, { status: 200 });
       res.headers.append('Set-Cookie', buildSurveySessionClearCookie());
       return res;
     }
 
-    const e164 = row.phone;
+    const e164 = resolvePhoneFromDb(row.phone_encrypted);
     if (!e164 || typeof e164 !== 'string' || !e164.startsWith('+')) {
-      console.error('[survey/verify] row missing E.164 phone', row.id);
+      console.error('[survey/verify] row missing E.164 phone', row.user_id);
       return NextResponse.json({ error: 'Something went wrong. Please contact support.' }, { status: 500 });
     }
 
@@ -99,11 +101,16 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid or expired code. Please try again.' }, { status: 400 });
     }
 
+    const verifiedAt = new Date().toISOString();
     const { error: updateError } = await supabase
-      .from('survey_responses')
-      .update({ verified: true })
-      .eq('id', row.id)
-      .eq('verified', false);
+      .from(FUNNEL_USERS_TABLE)
+      .update({
+        verified_at: verifiedAt,
+        registration_step: 'verified',
+        updated_at: verifiedAt,
+      })
+      .eq('user_id', row.user_id)
+      .is('verified_at', null);
 
     if (updateError) {
       if (updateError.code === '23505') {

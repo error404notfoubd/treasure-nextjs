@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { getAuthAdminClient } from "@/lib/supabase";
-import { canAssignRole, canModifyUser } from "@/lib/roles";
+import { canAssignRole, canChangeUserRole, canModifyUser, canRemoveUser } from "@/lib/roles";
 import { logAction } from "@/lib/audit";
 import { rejectIfNotDashboardHost } from "@/lib/dashboard/api-host";
 
@@ -13,7 +13,7 @@ export async function GET(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
-  const guard = await requireRole(80); // admin+
+  const guard = await requirePermission("manage_dashboard_users");
   if (guard.error) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   const admin = getAuthAdminClient();
@@ -34,7 +34,7 @@ export async function PATCH(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
-  const guard = await requireRole(80); // admin+
+  const guard = await requirePermission("manage_dashboard_users");
   if (guard.error) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   let body;
@@ -68,8 +68,14 @@ export async function PATCH(request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Check permission: can this actor modify this user?
-  if (!canModifyUser(guard.user.role, target.role)) {
+  // Check permission: can this actor change this user's role?
+  if (!canChangeUserRole(guard.user.role, guard.user.id, userId, target.role)) {
+    if (target.role === "owner" && userId !== guard.user.id) {
+      return NextResponse.json(
+        { error: "Cannot change another owner's role." },
+        { status: 403 }
+      );
+    }
     return NextResponse.json(
       { error: "Cannot modify a user with equal or higher role" },
       { status: 403 }
@@ -122,7 +128,7 @@ export async function DELETE(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
-  const guard = await requireRole(80); // admin+
+  const guard = await requirePermission("manage_dashboard_users");
   if (guard.error) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   let body;
@@ -137,18 +143,30 @@ export async function DELETE(request) {
 
   const admin = getAuthAdminClient();
 
-  // Check target role
-  const { data: target } = await admin
+  const { data: target, error: targetErr } = await admin
     .from("profiles")
     .select("role")
     .eq("id", userId)
     .single();
 
-  if (target && !canModifyUser(guard.user.role, target.role)) {
-    return NextResponse.json(
-      { error: "Cannot delete a user with equal or higher role" },
-      { status: 403 }
-    );
+  if (targetErr || !target) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  if (!canRemoveUser(guard.user.role, guard.user.id, userId, target.role)) {
+    if (target.role === "owner") {
+      return NextResponse.json(
+        { error: "Cannot remove an owner account from the dashboard." },
+        { status: 403 }
+      );
+    }
+    if (!canModifyUser(guard.user.role, target.role)) {
+      return NextResponse.json(
+        { error: "Cannot delete a user with equal or higher role" },
+        { status: 403 }
+      );
+    }
+    return NextResponse.json({ error: "Cannot delete this user." }, { status: 403 });
   }
 
   // Snapshot before deletion for the audit log

@@ -1,3 +1,7 @@
+/**
+ * Next.js 16+ **Proxy** middleware entry (not `middleware.js`).
+ * Export `proxy` + `config`; do not add a separate `middleware.js` — the build rejects both.
+ */
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import {

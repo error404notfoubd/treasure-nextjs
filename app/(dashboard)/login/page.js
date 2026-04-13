@@ -26,6 +26,7 @@ function LoginForm() {
   const redirect = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
     ? rawRedirect
     : "/dashboard";
+  const passwordJustReset = searchParams.get("reset") === "1";
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -97,6 +98,12 @@ function LoginForm() {
           <h1 className="text-xl font-bold text-center mb-1 tracking-tight">Welcome back</h1>
           <p className="text-ink-3 text-sm text-center mb-8">Sign in to the management console</p>
 
+          {passwordJustReset && (
+            <div className="bg-success-muted text-success text-xs font-medium px-4 py-3 rounded-lg mb-5">
+              Your password was updated. Sign in with your new password.
+            </div>
+          )}
+
           {error && (
             <div className="bg-danger-muted text-danger text-xs font-medium px-4 py-3 rounded-lg mb-5">
               {error}
@@ -119,8 +126,20 @@ function LoginForm() {
             </div>
 
             <div className="mb-6">
-              <label className="label">Password</label>
+              <div className="flex items-end justify-between gap-3 mb-1">
+                <label className="label mb-0" htmlFor="login-password">
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className={`text-[11px] font-medium text-accent hover:text-accent-hover whitespace-nowrap ${loading ? "pointer-events-none opacity-50" : ""}`}
+                  tabIndex={loading ? -1 : undefined}
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
+                id="login-password"
                 type="password"
                 className="input"
                 placeholder="Enter password"

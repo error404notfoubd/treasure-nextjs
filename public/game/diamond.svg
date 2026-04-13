@@ -1,0 +1,28 @@
+<svg width="100%" viewBox="0 0 300 340" xmlns="http://www.w3.org/2000/svg">
+<title>Rustic diamond</title>
+<defs>
+<linearGradient id="diaTop" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#E8F4FF"/><stop offset="30%" stop-color="#C8E0F0"/><stop offset="60%" stop-color="#A8C8E0"/><stop offset="100%" stop-color="#88AAC8"/></linearGradient>
+<linearGradient id="diaLeft" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#90B8D8"/><stop offset="50%" stop-color="#6898C0"/><stop offset="100%" stop-color="#4878A0"/></linearGradient>
+<linearGradient id="diaRight" x1="1" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#A0C8E0"/><stop offset="50%" stop-color="#78A8C8"/><stop offset="100%" stop-color="#5888A8"/></linearGradient>
+</defs>
+<g transform="translate(150, 160)">
+<ellipse cx="0" cy="138" rx="60" ry="9" fill="#0A0400" opacity="0.1"/>
+<polygon points="0,-130 -70,-48 70,-48" fill="url(#diaTop)" stroke="#4878A0" stroke-width="1.5"/>
+<polygon points="-38,-92 38,-92 70,-48 -70,-48" fill="#D0E8F8" stroke="#6898C0" stroke-width="0.8" opacity="0.6"/>
+<polygon points="-70,-48 0,135 0,-48" fill="url(#diaLeft)" stroke="#4878A0" stroke-width="1.2"/>
+<polygon points="70,-48 0,135 0,-48" fill="url(#diaRight)" stroke="#4878A0" stroke-width="1.2"/>
+<line x1="-38" y1="-92" x2="-56" y2="-48" stroke="#6898C0" stroke-width="0.7" opacity="0.5"/>
+<line x1="38" y1="-92" x2="56" y2="-48" stroke="#6898C0" stroke-width="0.7" opacity="0.5"/>
+<line x1="-38" y1="-92" x2="0" y2="-48" stroke="#6898C0" stroke-width="0.6" opacity="0.4"/>
+<line x1="38" y1="-92" x2="0" y2="-48" stroke="#6898C0" stroke-width="0.6" opacity="0.4"/>
+<line x1="-70" y1="-48" x2="-20" y2="55" stroke="#5888A8" stroke-width="0.6" opacity="0.3"/>
+<line x1="70" y1="-48" x2="20" y2="55" stroke="#5888A8" stroke-width="0.6" opacity="0.3"/>
+<line x1="-35" y1="-48" x2="0" y2="135" stroke="#5888A8" stroke-width="0.5" opacity="0.25"/>
+<line x1="35" y1="-48" x2="0" y2="135" stroke="#5888A8" stroke-width="0.5" opacity="0.25"/>
+<path d="M-25,-85 L-22,-77 L-17,-80 L-22,-73 L-27,-76 Z" fill="#FFF" opacity="0.5"/>
+<path d="M18,-68 L21,-62 L25,-64 L21,-58 L17,-61 Z" fill="#FFF" opacity="0.35"/>
+<path d="M-10,-98 L-8,-93 L-5,-95 L-8,-90 L-11,-93 Z" fill="#FFF" opacity="0.4"/>
+<line x1="-70" y1="-48" x2="70" y2="-48" stroke="#B0D0E8" stroke-width="1.8" opacity="0.4"/>
+<polygon points="0,-130 -70,-48 0,135 70,-48" fill="none" stroke="#A0C8E0" stroke-width="0.5" opacity="0.2"/>
+</g>
+</svg>

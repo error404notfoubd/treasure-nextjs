@@ -5,20 +5,21 @@ import { rejectIfNotDashboardHost } from "@/lib/dashboard/api-host";
 import { getClientIP } from "@/lib/ip";
 import { checkAuthRouteRateLimit } from "@/lib/auth/route-rate-limit";
 import { validatePasswordStrength } from "@/lib/auth/password";
-import GAME_CONFIG from "@/lib/config";
-
-const { AUTH_API } = GAME_CONFIG;
+import { getAppSettings } from "@/lib/settings/app-settings";
+import { getAuthAdminClient } from "@/lib/supabase";
+import { dashboardOriginFromRequest } from "@/lib/auth/dashboard-origin";
 
 export async function POST(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
+  const auth = await getAppSettings();
   const ip = getClientIP(request);
   const rl = checkAuthRouteRateLimit(
     ip,
     "auth_signup",
-    AUTH_API.SIGNUP_RATE_LIMIT_MAX_PER_WINDOW,
-    AUTH_API.SIGNUP_RATE_LIMIT_WINDOW_MS
+    auth.signupRateLimitMaxPerWindow,
+    auth.signupRateLimitWindowMs
   );
   if (rl.limited) {
     return NextResponse.json(
@@ -49,7 +50,7 @@ export async function POST(request) {
   if (!fullName || !email || !password) {
     return NextResponse.json({ error: "Full name, email, and password are required." }, { status: 422 });
   }
-  const pwErrors = validatePasswordStrength(password);
+  const pwErrors = validatePasswordStrength(password, auth.passwordMinLength);
   if (pwErrors.length > 0) {
     return NextResponse.json(
       { error: pwErrors[0] },
@@ -76,23 +77,37 @@ export async function POST(request) {
     }
   );
 
+  const origin = dashboardOriginFromRequest(request);
+  const emailRedirectTo = origin ? `${origin}/login` : undefined;
+
   const { data, error: authError } = await supabase.auth.signUp({
     email,
     password,
     options: {
+      ...(emailRedirectTo ? { emailRedirectTo } : {}),
       data: {
         full_name: fullName,
-        role: AUTH_API.DEFAULT_SIGNUP_ROLE,
       },
     },
   });
 
   if (authError) {
     console.error("[signup]", authError.message);
-    const safeMsg = authError.message?.includes("already registered")
-      ? authError.message
-      : "Could not create account. Please try again.";
-    return NextResponse.json({ error: safeMsg }, { status: 400 });
+    const msg = authError.message || "";
+    if (/already registered|already been registered|user already registered/i.test(msg)) {
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+    if (/confirmation email|error sending.*email|smtp|mail delivery/i.test(msg)) {
+      return NextResponse.json(
+        {
+          error:
+            "Supabase could not send the confirmation email. In the Supabase dashboard: Authentication → Providers → Email — set up SMTP (or use a test inbox), check rate limits, and ensure “Confirm email” is appropriate for your environment. For local dev you can disable “Confirm email” under Email provider settings.",
+          code: "email_confirmation_failed",
+        },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: "Could not create account. Please try again." }, { status: 400 });
   }
 
   if (!data?.user) {
@@ -108,6 +123,21 @@ export async function POST(request) {
     return NextResponse.json(
       { error: "This email is already registered.", code: "email_taken" },
       { status: 409 }
+    );
+  }
+
+  // Profile role comes only from server settings (DB trigger always inserts viewer).
+  const admin = getAuthAdminClient();
+  const { error: profileRoleError } = await admin
+    .from("profiles")
+    .update({ role: auth.defaultSignupRole })
+    .eq("id", data.user.id);
+
+  if (profileRoleError) {
+    console.error("[signup] profile role", profileRoleError.message);
+    return NextResponse.json(
+      { error: "Account was created but could not be finalized. Please contact support." },
+      { status: 500 }
     );
   }
 

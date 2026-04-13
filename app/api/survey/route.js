@@ -7,9 +7,25 @@ import { createVerificationToken } from '@/lib/survey/token';
 import { toE164 } from '@/lib/phoneE164';
 import { sendVerificationSms, isPreludeConfigured, userMessageForPreludeSendFailure } from '@/lib/survey/prelude';
 import { buildSurveySessionSetCookie } from '@/lib/survey/survey-session';
-import { smsSendRateLimitOptions, otpResendCooldownSec } from '@/lib/survey/rate-limits';
+import {
+  smsSendRateLimitOptions,
+  otpResendCooldownSec,
+  otpPerPhoneRateLimitOptions,
+} from '@/lib/survey/rate-limits';
 import { isMissingOtpLastSentAtColumn } from '@/lib/survey/otp-column';
-import GAME_CONFIG from '@/lib/config';
+import { getAppSettings } from '@/lib/settings/app-settings';
+import { phoneHash, emailHash } from '@/lib/survey/contact-storage';
+import { checkOtpPhoneSendLimit } from '@/lib/survey/otp-phone-limit';
+import {
+  FUNNEL_USERS_TABLE,
+  persistUserPhone,
+  persistUserEmail,
+} from '@/lib/funnel-users';
+
+function isSurveyControlPhone(e164, controlPhoneE164) {
+  const c = controlPhoneE164;
+  return typeof c === 'string' && c.length >= 8 && e164 === c.trim();
+}
 
 export const runtime = 'nodejs';
 
@@ -43,13 +59,14 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
   }
 
+  const appSettings = await getAppSettings();
   const raw = JSON.stringify(body);
-  if (raw.length > GAME_CONFIG.SURVEY_API.REQUEST_BODY_MAX_CHARS) {
+  if (raw.length > appSettings.surveyRequestBodyMaxChars) {
     return NextResponse.json({ error: 'Request too large.' }, { status: 413 });
   }
 
-  const { name, email, phone, frequency, consent } = body;
-  const strFields = { name, email, phone, frequency };
+  const { name, email, phone, frequency, consent, utm_source, utm_campaign, utm_medium } = body;
+  const strFields = { name, email, phone, frequency, utm_source, utm_campaign, utm_medium };
   for (const [key, val] of Object.entries(strFields)) {
     if (val !== undefined && val !== null && typeof val !== 'string') {
       return NextResponse.json({ error: `Field "${key}" must be a string.` }, { status: 422 });
@@ -83,6 +100,11 @@ export async function POST(request) {
   const emailForDb = cleanEmail.length > 0 ? cleanEmail : null;
   const userAgent  = (request.headers.get('user-agent') || '').slice(0, 300);
   const e164       = toE164(cleanPhone);
+  const trimUtm = (v) =>
+    typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null;
+  const utmSource = trimUtm(utm_source);
+  const utmCampaign = trimUtm(utm_campaign);
+  const utmMedium = trimUtm(utm_medium);
 
   if (!e164) {
     return NextResponse.json(
@@ -107,7 +129,7 @@ export async function POST(request) {
     }
 
     const { data: phoneExists } = await supabase
-      .rpc('fn_phone_exists', { p_phone: e164 });
+      .rpc('fn_phone_exists', { p_phone_hash: phoneHash(e164) });
 
     if (phoneExists) {
       return NextResponse.json(
@@ -118,7 +140,7 @@ export async function POST(request) {
 
     if (cleanEmail) {
       const { data: emailExists } = await supabase
-        .rpc('fn_email_exists', { p_email: cleanEmail });
+        .rpc('fn_email_exists', { p_email_hash: emailHash(cleanEmail) });
 
       if (emailExists) {
         return NextResponse.json(
@@ -151,39 +173,69 @@ export async function POST(request) {
       );
     }
 
+    const phHash = phoneHash(e164);
+    if (!isSurveyControlPhone(e164, appSettings.surveyControlPhoneE164)) {
+      const otpPhoneOpts = await otpPerPhoneRateLimitOptions();
+      const otpPhoneRate = await checkOtpPhoneSendLimit(supabase, phHash, otpPhoneOpts);
+      if (otpPhoneRate.limited) {
+        return NextResponse.json(
+          {
+            error:
+              'Too many verification texts to this number in the last hour. Please try again later.',
+            retryAfterSec: otpPhoneRate.retryAfterSec,
+          },
+          {
+            status: 429,
+            headers: { 'Retry-After': String(otpPhoneRate.retryAfterSec) },
+          }
+        );
+      }
+    }
+
+    const phoneFields = persistUserPhone(e164);
+    const emailFields = persistUserEmail(emailForDb);
+
     // If an unverified row already exists for this phone, update it in place
     // instead of creating a duplicate. Otherwise insert a fresh row.
+    const nowIso = new Date().toISOString();
     const rowPayload = {
-      name:       cleanName,
-      email:      emailForDb,
-      phone:      e164,
-      frequency:  cleanFreq || null,
-      ip_address: ip,
-      user_agent: userAgent,
-      verified:   false,
+      full_name:          cleanName,
+      ...phoneFields,
+      ...emailFields,
+      frequency:          cleanFreq || null,
+      ip_address:         ip,
+      user_agent:         userAgent,
+      consent_marketing:  consent === true || consent === 'true',
+      registration_step:  'submitted',
+      utm_source:         utmSource,
+      utm_campaign:       utmCampaign,
+      utm_medium:         utmMedium,
+      updated_at:         nowIso,
     };
 
     const sentAt = new Date().toISOString();
-    let rowId;
+    let userId;
     let isUpdate = false;
 
-    const { data: existingRow } = await supabase
-      .from('survey_responses')
-      .select('id')
-      .eq('phone', e164)
-      .eq('verified', false)
-      .order('submitted_at', { ascending: false })
+    const byHash = await supabase
+      .from(FUNNEL_USERS_TABLE)
+      .select('user_id')
+      .eq('phone_hash', phHash)
+      .is('verified_at', null)
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
+    const existingRow = byHash.data;
+
     if (existingRow) {
-      rowId = existingRow.id;
+      userId = existingRow.user_id;
       const { data: updated, error: updateError } = await supabase
-        .from('survey_responses')
-        .update({ ...rowPayload, submitted_at: new Date().toISOString() })
-        .eq('id', rowId)
-        .eq('verified', false)
-        .select('id')
+        .from(FUNNEL_USERS_TABLE)
+        .update({ ...rowPayload, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .is('verified_at', null)
+        .select('user_id')
         .maybeSingle();
 
       if (updateError) {
@@ -207,9 +259,9 @@ export async function POST(request) {
       }
     } else {
       const { data: inserted, error: insertError } = await supabase
-        .from('survey_responses')
+        .from(FUNNEL_USERS_TABLE)
         .insert(rowPayload)
-        .select('id')
+        .select('user_id')
         .single();
 
       if (insertError) {
@@ -228,7 +280,7 @@ export async function POST(request) {
         }
         throw insertError;
       }
-      rowId = inserted.id;
+      userId = inserted.user_id;
     }
 
     let preludeResult;
@@ -238,7 +290,7 @@ export async function POST(request) {
       const errMsg = String(e?.message ?? e);
       console.error('[survey POST Prelude create]', errMsg);
       if (!isUpdate) {
-        const { error: delErr } = await supabase.from('survey_responses').delete().eq('id', rowId);
+        const { error: delErr } = await supabase.from(FUNNEL_USERS_TABLE).delete().eq('user_id', userId);
         if (delErr) {
           console.error('[survey POST rollback delete after Prelude failure]', delErr.message ?? delErr);
         }
@@ -258,7 +310,7 @@ export async function POST(request) {
 
     if (!preludeResult.ok) {
       if (!isUpdate) {
-        const { error: delErr } = await supabase.from('survey_responses').delete().eq('id', rowId);
+        const { error: delErr } = await supabase.from(FUNNEL_USERS_TABLE).delete().eq('user_id', userId);
         if (delErr) {
           console.error('[survey POST rollback delete after Prelude blocked]', delErr.message ?? delErr);
         }
@@ -268,14 +320,14 @@ export async function POST(request) {
     }
 
     const { error: otpColError } = await supabase
-      .from('survey_responses')
+      .from(FUNNEL_USERS_TABLE)
       .update({ otp_last_sent_at: sentAt })
-      .eq('id', rowId);
+      .eq('user_id', userId);
 
     if (otpColError) {
       if (isMissingOtpLastSentAtColumn(otpColError)) {
         console.warn(
-          '[survey POST] Run migration: ALTER TABLE public.survey_responses ADD COLUMN IF NOT EXISTS otp_last_sent_at timestamptz;'
+          '[survey POST] Run migration: ALTER TABLE public.users ADD COLUMN IF NOT EXISTS otp_last_sent_at timestamptz;'
         );
       } else {
         console.error('[survey POST otp_last_sent_at]', otpColError.message ?? otpColError);
@@ -286,7 +338,7 @@ export async function POST(request) {
       .from('rate_limit_log')
       .insert({ ip_address: ip, success: true });
 
-    const token = createVerificationToken(rowId);
+    const token = createVerificationToken(userId);
 
     const res = NextResponse.json(
       {
@@ -294,7 +346,7 @@ export async function POST(request) {
         needsVerification: true,
         otpCooldownSec: otpResendCooldownSec(),
         verificationStatus: preludeResult.status,
-        message: 'Enter the code we sent to your phone to finish and claim your bonus.',
+        message: 'Enter the code we sent to your phone to finish verification and unlock bonus coins.',
       },
       { status: 201 }
     );

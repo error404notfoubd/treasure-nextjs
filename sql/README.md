@@ -2,24 +2,12 @@
 
 This folder defines **PostgreSQL / Supabase** objects: tables, views, RLS policies, and helper functions.
 
-**How to apply:** run scripts in **`Create/`** in order: `00_schema_baseline.sql`, then `01` … `09`.  
-**Or run everything at once:** **`Create_All.sql`** in the `sql/` folder concatenates `Create/00` … `Create/09` in order (including the read-only verification `SELECT`s at the end). After you edit any file under `Create/`, regenerate `Create_All.sql` with:
-
-```powershell
-Set-Location path\to\treasure-nextjs\sql
-$files = 'Create/00_schema_baseline.sql','Create/01_profiles.sql','Create/02_survey_responses.sql','Create/03_verification_codes.sql','Create/04_audit_log.sql','Create/05_rate_limit_log.sql','Create/06_rate_limit_events.sql','Create/07_view_redacted.sql','Create/08_helper_functions.sql','Create/09_verification_queries.sql'
-$header = @"
--- =============================================================================
---  CREATE ALL -- full schema (sql/Create/00 through 09 in order)
---  Regenerate after editing individual files: see sql/README.md
--- =============================================================================
-
-"@
-$body = ($files | ForEach-Object { "-- SECTION: $_`r`n" + (Get-Content -Raw -Encoding UTF8 $_) + "`r`n" }) -join "`r`n"
-Set-Content -Path 'Create_All.sql' -Value ($header + $body) -Encoding UTF8 -NoNewline
-```
+**How to apply:** run scripts in **`Create/`** in dependency order: `00`, `01`, `04`–`06`, **`10_users.sql`**, `08`, `11`, `12`, then **`09_verification_queries.sql`**. (Legacy-only scripts `02`, `03`, and `07` are optional.)  
+**Or run everything at once:** apply **`Create_All.sql`** (standalone monolith; keep it in sync manually if you also edit `Create/*.sql`).
 
 **Full teardown (dangerous):** **`Drop_All.sql`** runs the same drops as all files in **`Drop/`**, and also removes **`audit_log`** (no separate `Drop/` script for it). It does **not** drop **`profiles`** or auth/profile triggers. Back up first.
+
+**Legacy cleanup only:** **`Drop_role_privilege_levels.sql`** removes the old `role_privilege_levels` table and its `role_privilege_levels_set_updated_at` trigger function (safe if already gone). Use when migrating an existing DB to `role_permission_grants` without running full `Drop_All.sql`.
 
 **How the app connects:** server-side API routes use the **Supabase service role** key. Browsers and logged-in users do **not** use that key.
 
@@ -50,7 +38,7 @@ flowchart LR
   Auth[auth.users] -->|trigger| P
 ```
 
-- **Survey flow:** API writes/reads **`survey_responses`**, logs limits in **`rate_limit_log`** and **`rate_limit_events`**.  
+- **Survey / funnel flow:** game and dashboard APIs write/reads **`public.users`** (encrypted phone/email + hashes). Legacy **`survey_responses`** remains in the schema but is not used by the current app. Limits use **`rate_limit_log`** and **`rate_limit_events`**.  
 - **Auth:** new users get a row in **`profiles`** via a database trigger (not from survey code).  
 - **`verification_codes`** and **`audit_log`** are mostly **infrastructure** for this repo (see each table below).
 

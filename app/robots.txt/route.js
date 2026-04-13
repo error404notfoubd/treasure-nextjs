@@ -15,6 +15,8 @@ Disallow: /admin/
 Disallow: /dashboard/
 Disallow: /login
 Disallow: /signup
+Disallow: /forgot-password
+Disallow: /auth/
 
 Sitemap: ${siteConfig.URL}/sitemap.xml
 `;

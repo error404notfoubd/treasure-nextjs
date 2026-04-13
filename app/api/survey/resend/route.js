@@ -8,13 +8,28 @@ import {
   getSurveySessionToken,
   buildSurveySessionClearCookie,
 } from '@/lib/survey/survey-session';
-import { smsSendRateLimitOptions, resendRouteRateLimitOptions, otpResendCooldownSec } from '@/lib/survey/rate-limits';
+import {
+  smsSendRateLimitOptions,
+  resendRouteRateLimitOptions,
+  otpResendCooldownSec,
+  otpPerPhoneRateLimitOptions,
+} from '@/lib/survey/rate-limits';
 import { isMissingOtpLastSentAtColumn } from '@/lib/survey/otp-column';
+import { resolvePhoneFromDb, phoneHash } from '@/lib/survey/contact-storage';
+import { FUNNEL_USERS_TABLE } from '@/lib/funnel-users';
+import { checkOtpPhoneSendLimit } from '@/lib/survey/otp-phone-limit';
+import { getAppSettings } from '@/lib/settings/app-settings';
+
+function isSurveyControlPhone(e164, controlPhoneE164) {
+  const c = controlPhoneE164;
+  return typeof c === 'string' && c.length >= 8 && e164 === c.trim();
+}
 
 export const runtime = 'nodejs';
 
 export async function POST(request) {
   const ip = getClientIP(request);
+  const appSettings = await getAppSettings();
 
   const resendOpts = resendRouteRateLimitOptions();
   const resendRate = await checkRateLimitDistributed(supabase, ip, 'survey_resend', resendOpts);
@@ -66,9 +81,9 @@ export async function POST(request) {
 
   try {
     const { data: row, error: fetchError } = await supabase
-      .from('survey_responses')
-      .select('id, phone, verified, otp_last_sent_at, submitted_at')
-      .eq('id', result.surveyResponseId)
+      .from(FUNNEL_USERS_TABLE)
+      .select('user_id, phone_encrypted, verified_at, otp_last_sent_at, created_at')
+      .eq('user_id', result.surveyResponseId)
       .single();
 
     if (fetchError || !row) {
@@ -77,16 +92,11 @@ export async function POST(request) {
       return res;
     }
 
-    if (row.verified === true) {
+    if (row.verified_at != null) {
       return NextResponse.json({ error: 'This number is already verified.' }, { status: 400 });
     }
 
-    const e164 = row.phone;
-    if (!e164 || typeof e164 !== 'string' || !e164.startsWith('+')) {
-      return NextResponse.json({ error: 'Something went wrong.' }, { status: 500 });
-    }
-
-    const lastSentRaw = row.otp_last_sent_at || row.submitted_at;
+    const lastSentRaw = row.otp_last_sent_at || row.created_at;
     if (lastSentRaw) {
       const lastMs = new Date(lastSentRaw).getTime();
       if (Number.isFinite(lastMs)) {
@@ -107,9 +117,32 @@ export async function POST(request) {
       }
     }
 
+    const e164Resolved = resolvePhoneFromDb(row.phone_encrypted);
+    if (!e164Resolved || typeof e164Resolved !== 'string' || !e164Resolved.startsWith('+')) {
+      return NextResponse.json({ error: 'Something went wrong.' }, { status: 500 });
+    }
+    const phHash = phoneHash(e164Resolved);
+    if (!isSurveyControlPhone(e164Resolved, appSettings.surveyControlPhoneE164)) {
+      const otpPhoneOpts = await otpPerPhoneRateLimitOptions();
+      const otpPhoneRate = await checkOtpPhoneSendLimit(supabase, phHash, otpPhoneOpts);
+      if (otpPhoneRate.limited) {
+        return NextResponse.json(
+          {
+            error:
+              'Too many verification texts to this number in the last hour. Please try again later.',
+            retryAfterSec: otpPhoneRate.retryAfterSec,
+          },
+          {
+            status: 429,
+            headers: { 'Retry-After': String(otpPhoneRate.retryAfterSec) },
+          }
+        );
+      }
+    }
+
     let preludeResult;
     try {
-      preludeResult = await sendVerificationSms(e164);
+      preludeResult = await sendVerificationSms(e164Resolved);
     } catch (e) {
       console.error('[survey/resend Prelude]', e?.message ?? e);
       return NextResponse.json(
@@ -131,15 +164,15 @@ export async function POST(request) {
 
     const sentAt = new Date().toISOString();
     const { error: updateError } = await supabase
-      .from('survey_responses')
+      .from(FUNNEL_USERS_TABLE)
       .update({ otp_last_sent_at: sentAt })
-      .eq('id', row.id)
-      .eq('verified', false);
+      .eq('user_id', row.user_id)
+      .is('verified_at', null);
 
     if (updateError) {
       if (isMissingOtpLastSentAtColumn(updateError)) {
         console.warn(
-          '[survey/resend] SMS sent but otp_last_sent_at column missing — run supabase-sms-verification.sql migration.'
+          '[survey/resend] SMS sent but otp_last_sent_at column missing on public.users.'
         );
       } else {
         console.error('[survey/resend update]', updateError.message ?? updateError);

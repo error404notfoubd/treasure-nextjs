@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { getAuthAdminClient } from "@/lib/supabase";
 import { logAction } from "@/lib/audit";
 import { rejectIfNotDashboardHost } from "@/lib/dashboard/api-host";
@@ -11,7 +11,7 @@ export async function GET(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
-  const guard = await requireRole(80); // admin+
+  const guard = await requirePermission("approve_signups");
   if (guard.error) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   const admin = getAuthAdminClient();
@@ -33,7 +33,7 @@ export async function PATCH(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
-  const guard = await requireRole(80); // admin+
+  const guard = await requirePermission("approve_signups");
   if (guard.error) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   let body;
@@ -60,8 +60,25 @@ export async function PATCH(request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  if (target.status === "approved" && action === "approve") {
-    return NextResponse.json({ error: "User is already approved" }, { status: 400 });
+  if (action === "reject") {
+    if (target.status !== "pending") {
+      return NextResponse.json(
+        { error: "Only pending sign-up requests can be rejected." },
+        { status: 400 }
+      );
+    }
+  }
+
+  if (action === "approve") {
+    if (target.status === "approved") {
+      return NextResponse.json({ error: "User is already approved" }, { status: 400 });
+    }
+    if (target.status !== "pending" && target.status !== "rejected") {
+      return NextResponse.json(
+        { error: "Only pending or rejected accounts can be approved." },
+        { status: 400 }
+      );
+    }
   }
 
   const newStatus = action === "approve" ? "approved" : "rejected";
@@ -82,7 +99,7 @@ export async function PATCH(request) {
     table: "profiles",
     operation: action === "approve" ? "APPROVE" : "REJECT",
     rowId: userId,
-    oldData: { status: "pending", email: target.email, full_name: target.full_name },
+    oldData: { status: target.status, email: target.email, full_name: target.full_name },
     newData: { status: newStatus, email: target.email, full_name: target.full_name },
     actor: guard.user.fullName || guard.user.email,
     actorRole: guard.user.role,

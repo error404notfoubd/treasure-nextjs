@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/components/toast";
+import { useUser } from "../dashboard-client";
 import { apiFetch } from "@/lib/dashboard/api-client";
+import { canViewUserIdentifiers } from "@/lib/roles";
 import { IconRefresh, IconEye, IconX } from "@/components/icons";
 import { SkeletonAuditEntry } from "@/components/skeleton";
 
@@ -28,6 +30,8 @@ const OP_LABELS = {
   DELETE_USER: "Removed user",
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function hasViewableData(log) {
   return (
     (log.old_data && typeof log.old_data === "object" && Object.keys(log.old_data).length > 0) ||
@@ -35,8 +39,19 @@ function hasViewableData(log) {
   );
 }
 
+/** Hide profile / funnel UUID fields in audit diff for non–owner/admin viewers. */
+function shouldHideAuditField(key, sampleVal, showUserIds) {
+  if (showUserIds) return false;
+  const k = String(key);
+  if (k === "user_id") return true;
+  if (k === "id" && (typeof sampleVal !== "string" || UUID_RE.test(sampleVal))) return true;
+  return false;
+}
+
 export default function AuditPage() {
   const toast = useToast();
+  const actor = useUser();
+  const showUserIds = canViewUserIdentifiers(actor?.role);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedLog, setSelectedLog] = useState(null);
@@ -102,7 +117,7 @@ export default function AuditPage() {
                         <strong className="text-ink-1">{OP_LABELS[log.operation] || log.operation}</strong>
                         {" on "}
                         <strong className="text-ink-1">{log.table_name}</strong>
-                        <EntryDetail log={log} />
+                        <EntryDetail log={log} showUserIds={showUserIds} />
                       </div>
                       <div className="text-[11px] text-ink-4 font-mono mt-0.5 flex items-center gap-2">
                         <span>{new Date(log.performed_at).toLocaleString()}</span>
@@ -132,13 +147,13 @@ export default function AuditPage() {
       </div>
 
       {selectedLog && (
-        <DataDiffModal log={selectedLog} onClose={() => setSelectedLog(null)} />
+        <DataDiffModal log={selectedLog} showUserIds={showUserIds} onClose={() => setSelectedLog(null)} />
       )}
     </>
   );
 }
 
-function EntryDetail({ log }) {
+function EntryDetail({ log, showUserIds }) {
   const name =
     log.new_data?.name ||
     log.old_data?.name ||
@@ -170,7 +185,7 @@ function EntryDetail({ log }) {
     return <span className="text-ink-3"> — {name}</span>;
   }
 
-  if (log.row_id) {
+  if (showUserIds && log.row_id) {
     return <span className="text-ink-3"> (#{log.row_id})</span>;
   }
 
@@ -192,7 +207,7 @@ function formatFieldName(key) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function DataDiffModal({ log, onClose }) {
+function DataDiffModal({ log, showUserIds, onClose }) {
   useEffect(() => {
     const handleEsc = (e) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", handleEsc);
@@ -205,7 +220,10 @@ function DataDiffModal({ log, onClose }) {
 
   const oldData = log.old_data && typeof log.old_data === "object" ? log.old_data : {};
   const newData = log.new_data && typeof log.new_data === "object" ? log.new_data : {};
-  const allKeys = [...new Set([...Object.keys(oldData), ...Object.keys(newData)])];
+  const allKeysRaw = [...new Set([...Object.keys(oldData), ...Object.keys(newData)])];
+  const allKeys = allKeysRaw.filter(
+    (key) => !shouldHideAuditField(key, oldData[key] ?? newData[key], showUserIds)
+  );
 
   const hasOld = Object.keys(oldData).length > 0;
   const hasNew = Object.keys(newData).length > 0;
@@ -234,7 +252,7 @@ function DataDiffModal({ log, onClose }) {
                 {log.performed_by && log.performed_by !== "system" && (
                   <> &middot; {log.performed_by}</>
                 )}
-                {log.row_id && <> &middot; ID: {log.row_id}</>}
+                {showUserIds && log.row_id && <> &middot; ID: {log.row_id}</>}
               </p>
             </div>
           </div>
@@ -282,7 +300,9 @@ function DataDiffModal({ log, onClose }) {
                 {hasOld ? "Deleted Data" : "Created Data"}
               </div>
               <div className="space-y-0">
-                {Object.entries(hasOld ? oldData : newData).map(([key, val]) => (
+                {Object.entries(hasOld ? oldData : newData)
+                  .filter(([key, val]) => !shouldHideAuditField(key, val, showUserIds))
+                  .map(([key, val]) => (
                   <div key={key} className="flex items-baseline gap-3 py-2 border-b border-surface-3/40 last:border-b-0 px-1">
                     <span className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider w-28 flex-shrink-0">{formatFieldName(key)}</span>
                     <span className={`text-xs font-mono break-all ${hasOld ? "text-danger" : "text-success"}`}>

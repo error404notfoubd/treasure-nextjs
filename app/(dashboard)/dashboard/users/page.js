@@ -1,13 +1,30 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useUser } from "../dashboard-client";
 import { useToast } from "@/components/toast";
 import { apiFetch } from "@/lib/dashboard/api-client";
-import { ROLES, ROLE_ORDER, PERMISSIONS, canAssignRole, canModifyUser } from "@/lib/roles";
+import {
+  ROLES,
+  ROLE_ORDER,
+  PERMISSIONS,
+  canAssignRole,
+  canChangeUserRole,
+  canModifyUser,
+  canRemoveUser,
+  getRoleLevel,
+} from "@/lib/roles";
+import { PERMISSION_CATALOG, ROLE_CARD_ORDER } from "@/lib/permissions-catalog";
 import { IconEdit, IconTrash, IconRefresh, IconCheck, IconX, IconKey, IconActivity } from "@/components/icons";
 import { SkeletonRoleCard, SkeletonTableRows } from "@/components/skeleton";
 import Modal from "@/components/modal";
+import { validatePasswordStrength } from "@/lib/auth/password";
+
+function permissionLabelsForRole(roleKey, grants) {
+  if (!grants) return PERMISSIONS[roleKey] || [];
+  return PERMISSION_CATALOG.filter(({ key }) => (grants[key] || []).includes(roleKey)).map((p) => p.label);
+}
 
 export default function UsersPage() {
   const user = useUser();
@@ -18,8 +35,33 @@ export default function UsersPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [resetPwTarget, setResetPwTarget] = useState(null);
   const [activityTarget, setActivityTarget] = useState(null);
+  /** Effective grants from DB for role summary cards (admins can read). */
+  const [roleGrants, setRoleGrants] = useState(null);
+  /** Same minimum as server + used with {@link validatePasswordStrength} in reset modal. */
+  const [passwordMinLength, setPasswordMinLength] = useState(8);
 
   const isOwner = user?.role === "owner";
+
+  /**
+   * Role summary cards: only for owner & admin. Viewers and editors never see this strip.
+   * For admin/owner, only cards at or below their rank (admin does not see the Owner card).
+   */
+  const visibleRoleCardKeys = useMemo(() => {
+    const actor = user?.role;
+    if (actor !== "owner" && actor !== "admin") return [];
+    if (!actor || !ROLES[actor]) return [];
+    const cap = getRoleLevel(actor);
+    return ROLE_CARD_ORDER.filter((key) => getRoleLevel(key) <= cap);
+  }, [user?.role]);
+
+  const roleCardGridClass =
+    visibleRoleCardKeys.length >= 4
+      ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+      : visibleRoleCardKeys.length === 3
+        ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+        : visibleRoleCardKeys.length === 2
+          ? "grid-cols-1 sm:grid-cols-2"
+          : "grid-cols-1";
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -37,6 +79,36 @@ export default function UsersPage() {
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  useEffect(() => {
+    if (user?.role !== "owner" && user?.role !== "admin") return;
+    (async () => {
+      try {
+        const res = await apiFetch("/api/dashboard/permission-grants");
+        const json = await res.json();
+        if (!res.ok) return;
+        if (json.grants) setRoleGrants(json.grants);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    (async () => {
+      try {
+        const res = await apiFetch("/api/dashboard/app-settings");
+        const json = await res.json();
+        if (!res.ok) return;
+        if (typeof json.passwordMinLength === "number" && json.passwordMinLength > 0) {
+          setPasswordMinLength(json.passwordMinLength);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [isOwner]);
 
   const handleRoleChange = async (userId, newRole) => {
     try {
@@ -89,7 +161,17 @@ export default function UsersPage() {
   return (
     <>
       <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-surface-3/50 bg-surface-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4 lg:px-7">
-        <h2 className="text-base font-bold tracking-tight sm:text-lg">User Management</h2>
+        <div>
+          <h2 className="text-base font-bold tracking-tight sm:text-lg">User Management</h2>
+          {isOwner && (
+            <p className="text-[11px] text-ink-4 mt-1">
+              Edit who can do what in the console:{" "}
+              <Link href="/dashboard/permissions" className="text-accent hover:underline font-medium">
+                Dashboard permissions
+              </Link>
+            </p>
+          )}
+        </div>
         <button
           className="btn btn-ghost btn-sm gap-1.5"
           onClick={fetchUsers}
@@ -102,38 +184,42 @@ export default function UsersPage() {
       </div>
 
       <div className="flex-1 space-y-6 overflow-y-auto p-4 sm:p-6 lg:p-7">
-        {/* Role Cards */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {loading ? (
-            Array.from({ length: 4 }).map((_, i) => <SkeletonRoleCard key={i} />)
-          ) : (
-            ROLE_ORDER.map((key) => {
-              const role = ROLES[key];
-              const count = profiles.filter((p) => p.role === key).length;
-              return (
-                <div key={key} className="card p-5">
-                  <div className="text-2xl mb-2">{role.icon}</div>
-                  <div className="text-sm font-bold" style={{ color: role.color }}>
-                    {role.label}
+        {/* Role cards: owner & admin only; checkmarks from permission matrix; ranks at or below the signed-in user */}
+        {visibleRoleCardKeys.length > 0 && (
+          <div className={`grid gap-3 ${roleCardGridClass}`}>
+            {loading ? (
+              Array.from({ length: Math.max(visibleRoleCardKeys.length, 1) }).map((_, i) => (
+                <SkeletonRoleCard key={i} />
+              ))
+            ) : (
+              visibleRoleCardKeys.map((key) => {
+                const role = ROLES[key];
+                const count = profiles.filter((p) => p.role === key).length;
+                return (
+                  <div key={key} className="card p-5">
+                    <div className="text-2xl mb-2">{role.icon}</div>
+                    <div className="text-sm font-bold" style={{ color: role.color }}>
+                      {role.label}
+                    </div>
+                    <div className="text-[11px] text-ink-4 mt-1 leading-relaxed">
+                      {role.description}
+                    </div>
+                    <div className="text-[11px] text-ink-4 font-mono mt-3">
+                      {count} user{count !== 1 ? "s" : ""}
+                    </div>
+                    <div className="mt-3 space-y-1">
+                      {permissionLabelsForRole(key, roleGrants).map((p) => (
+                        <div key={p} className="flex items-center gap-1.5 text-[11px] text-ink-3">
+                          <span className="text-success">✓</span> {p}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-ink-4 mt-1 leading-relaxed">
-                    {role.description}
-                  </div>
-                  <div className="text-[11px] text-ink-4 font-mono mt-3">
-                    {count} user{count !== 1 ? "s" : ""}
-                  </div>
-                  <div className="mt-3 space-y-1">
-                    {PERMISSIONS[key].map((p) => (
-                      <div key={p} className="flex items-center gap-1.5 text-[11px] text-ink-3">
-                        <span className="text-success">✓</span> {p}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+          </div>
+        )}
 
         {/* Users Table */}
         <div className="card overflow-hidden">
@@ -167,6 +253,10 @@ export default function UsersPage() {
                     const role = ROLES[p.role] || ROLES.viewer;
                     const isSelf = p.id === user?.id;
                     const canModify = canModifyUser(user?.role, p.role);
+                    const canEditRole =
+                      canModify &&
+                      canChangeUserRole(user?.role, user?.id, p.id, p.role);
+                    const canRemoveRow = canRemoveUser(user?.role, user?.id, p.id, p.role);
                     return (
                       <tr key={p.id}>
                         <td>
@@ -245,6 +335,7 @@ export default function UsersPage() {
                             )}
                             {!isSelf && canModify && p.status === "approved" && (
                               <>
+                                {canEditRole && (
                                 <button
                                   className="p-1.5 rounded-md text-ink-4 hover:text-ink-1 hover:bg-surface-3 transition-colors"
                                   title="Change role"
@@ -252,6 +343,7 @@ export default function UsersPage() {
                                 >
                                   <IconEdit />
                                 </button>
+                                )}
                                 {isOwner && p.role !== "owner" && (
                                   <button
                                     className="p-1.5 rounded-md text-ink-4 hover:text-accent hover:bg-accent-muted transition-colors"
@@ -261,6 +353,7 @@ export default function UsersPage() {
                                     <IconKey />
                                   </button>
                                 )}
+                                {canRemoveRow && (
                                 <button
                                   className="p-1.5 rounded-md text-ink-4 hover:text-danger hover:bg-danger-muted transition-colors"
                                   title="Remove user"
@@ -268,6 +361,7 @@ export default function UsersPage() {
                                 >
                                   <IconTrash />
                                 </button>
+                                )}
                               </>
                             )}
                           </div>
@@ -304,6 +398,7 @@ export default function UsersPage() {
       {resetPwTarget && (
         <ResetPasswordModal
           target={resetPwTarget}
+          passwordMinLength={passwordMinLength}
           onClose={() => setResetPwTarget(null)}
           onSuccess={() => { setResetPwTarget(null); toast("Password reset successfully", "success"); }}
         />
@@ -410,14 +505,15 @@ function ActivityModal({ target, onClose }) {
   );
 }
 
-function ResetPasswordModal({ target, onClose, onSuccess }) {
+function ResetPasswordModal({ target, passwordMinLength, onClose, onSuccess }) {
   const toast = useToast();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
   const [show, setShow] = useState(false);
 
-  const isValid = password.length >= 8 && password === confirm;
+  const strengthErrors = validatePasswordStrength(password, passwordMinLength);
+  const isValid = strengthErrors.length === 0 && password.length > 0 && password === confirm;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -428,11 +524,11 @@ function ResetPasswordModal({ target, onClose, onSuccess }) {
         method: "POST",
         body: JSON.stringify({ userId: target.id, newPassword: password }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
       onSuccess();
     } catch (err) {
-      toast(err.message, "error");
+      toast(err.message || "Reset failed", "error");
     }
     setSaving(false);
   };
@@ -443,8 +539,13 @@ function ResetPasswordModal({ target, onClose, onSuccess }) {
       onClose={onClose}
       footer={
         <>
-          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={!isValid || saving}>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleSubmit}
+            disabled={!isValid || saving}
+          >
             {saving ? "Resetting…" : "Reset Password"}
           </button>
         </>
@@ -453,23 +554,27 @@ function ResetPasswordModal({ target, onClose, onSuccess }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         <p className="text-xs text-ink-3 leading-relaxed">
           Set a new password for <strong className="text-ink-1">{target.full_name || target.email}</strong>.
-          They will need to use this password on their next login.
+          They will need to use this password on their next login. Passwords must meet the same rules as signup
+          (length, upper and lower case, number, and special character).
         </p>
         <div>
           <label className="label">New Password</label>
           <input
             type={show ? "text" : "password"}
             className="input"
-            placeholder="At least 8 characters"
+            placeholder={`At least ${passwordMinLength} characters + complexity`}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
-            minLength={8}
+            minLength={passwordMinLength}
             required
           />
-          {password.length > 0 && password.length < 8 && (
-            <p className="text-[11px] text-warn mt-1">Must be at least 8 characters</p>
-          )}
+          {password.length > 0 &&
+            strengthErrors.map((msg) => (
+              <p key={msg} className="text-[11px] text-warn mt-1">
+                {msg}
+              </p>
+            ))}
         </div>
         <div>
           <label className="label">Confirm Password</label>

@@ -3,9 +3,7 @@ import { getAuthAdminClient } from "@/lib/supabase";
 import { rejectIfNotDashboardHost } from "@/lib/dashboard/api-host";
 import { getClientIP } from "@/lib/ip";
 import { checkAuthRouteRateLimit } from "@/lib/auth/route-rate-limit";
-import GAME_CONFIG from "@/lib/config";
-
-const { AUTH_API } = GAME_CONFIG;
+import { getAppSettings } from "@/lib/settings/app-settings";
 
 /**
  * POST /api/auth/check-availability
@@ -16,12 +14,13 @@ export async function POST(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
+  const auth = await getAppSettings();
   const ip = getClientIP(request);
   const rl = checkAuthRouteRateLimit(
     ip,
     "auth_check_availability",
-    AUTH_API.CHECK_AVAILABILITY_MAX_PER_WINDOW,
-    AUTH_API.CHECK_AVAILABILITY_WINDOW_MS
+    auth.checkAvailabilityMaxPerWindow,
+    auth.checkAvailabilityWindowMs
   );
   if (rl.limited) {
     return NextResponse.json(

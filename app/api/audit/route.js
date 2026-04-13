@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { getDataClient } from "@/lib/supabase";
 import { rejectIfNotDashboardHost } from "@/lib/dashboard/api-host";
 
@@ -16,7 +16,7 @@ export async function GET(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
-  const guard = await requireRole(80); // admin+
+  const guard = await requirePermission("view_audit");
   if (guard.error) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   const { searchParams } = new URL(request.url);

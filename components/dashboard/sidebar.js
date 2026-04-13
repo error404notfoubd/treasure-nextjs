@@ -7,19 +7,28 @@ import {
   IconShield,
   IconActivity,
   IconSettings,
+  IconSliders,
   IconLogout,
   IconClock,
+  IconShieldCheck,
 } from "@/components/icons";
 import { apiFetch } from "@/lib/dashboard/api-client";
-import { ROLES, getRoleLevel } from "@/lib/roles";
+import { ROLES } from "@/lib/roles";
 import { useDashboardSidebar } from "@/components/dashboard/layout-context";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Leads", icon: IconUsers, minLevel: 10 },
-  { href: "/dashboard/requests", label: "Requests", icon: IconClock, minLevel: 80 },
-  { href: "/dashboard/audit", label: "Audit Log", icon: IconActivity, minLevel: 80 },
-  { href: "/dashboard/users", label: "User Management", icon: IconShield, minLevel: 80 },
-  { href: "/dashboard/settings", label: "Settings", icon: IconSettings, minLevel: 10 },
+  { href: "/dashboard", label: "Leads", icon: IconUsers, permission: "view_leads" },
+  { href: "/dashboard/requests", label: "Requests", icon: IconClock, permission: "approve_signups" },
+  { href: "/dashboard/audit", label: "Audit Log", icon: IconActivity, permission: "view_audit" },
+  { href: "/dashboard/users", label: "User Management", icon: IconShield, permission: "manage_dashboard_users" },
+  {
+    href: "/dashboard/permissions",
+    label: "Dashboard permissions",
+    icon: IconShieldCheck,
+    ownerOnly: true,
+  },
+  { href: "/dashboard/system", label: "System", icon: IconSliders, permission: "modify_system_settings" },
+  { href: "/dashboard/settings", label: "Settings", icon: IconSettings, permission: "view_leads" },
 ];
 
 function isWideScreen() {
@@ -31,7 +40,7 @@ export default function Sidebar({ user }) {
   const router = useRouter();
   const pathname = usePathname();
   const { sidebarOpen, setSidebarOpen } = useDashboardSidebar();
-  const roleLevel = getRoleLevel(user?.role);
+  const perm = new Set(user?.permissions || []);
   const role = ROLES[user?.role] || ROLES.viewer;
 
   const handleLogout = async () => {
@@ -101,7 +110,11 @@ export default function Sidebar({ user }) {
 
           {/* Nav */}
           <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
-            {NAV_ITEMS.filter((item) => roleLevel >= item.minLevel).map((item) => {
+            {NAV_ITEMS.filter((item) => {
+              if (item.ownerOnly) return user?.role === "owner";
+              if (item.permission) return perm.has(item.permission);
+              return true;
+            }).map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);
               return (

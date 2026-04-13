@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
+import { getPermissionGrants, hasPermission } from "@/lib/permission-grants";
 import { getDataClient } from "@/lib/supabase";
 import { logAction } from "@/lib/audit";
 import { rejectIfNotDashboardHost } from "@/lib/dashboard/api-host";
+import {
+  FUNNEL_USERS_TABLE,
+  mapUserRowForDashboard,
+  persistUserPhone,
+  persistUserEmail,
+  isFunnelUserId,
+} from "@/lib/funnel-users";
+import { phoneHash, emailHash } from "@/lib/survey/contact-storage";
+import { toE164 } from "@/lib/phoneE164";
 
 const MAX_LIMIT = 100;
 
-// Allow only safe alphanumeric, space, @, +, and dot for search
 function sanitizeSearch(raw) {
   return raw.replace(/[^a-zA-Z0-9@.+ -]/g, "").trim().slice(0, 200);
 }
@@ -16,7 +25,7 @@ export async function GET(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
-  const guard = await requireRole(10); // viewer+
+  const guard = await requirePermission("view_leads");
   if (guard.error) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   const { searchParams } = new URL(request.url);
@@ -27,18 +36,25 @@ export async function GET(request) {
 
   const db = getDataClient();
   let query = db
-    .from("survey_responses")
+    .from(FUNNEL_USERS_TABLE)
     .select("*", { count: "exact" })
-    .order("submitted_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .range(page * limit, page * limit + limit - 1);
 
   if (search) {
-    const pattern = `%${search}%`;
-    query = query.or(
-      ["name", "email", "phone"]
-        .map((col) => `${col}.ilike.${pattern}`)
-        .join(",")
-    );
+    const esc = search.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const namePart = `full_name.ilike.%${esc}%`;
+    const parts = [namePart];
+    if (search.includes("@")) {
+      const eh = emailHash(search);
+      if (eh) parts.push(`email_hash.eq.${eh}`);
+    }
+    const e164Guess = toE164(search);
+    if (e164Guess) {
+      const ph = phoneHash(e164Guess);
+      if (ph) parts.push(`phone_hash.eq.${ph}`);
+    }
+    query = query.or(parts.join(","));
   }
   if (flaggedOnly) {
     query = query.eq("is_flagged", true);
@@ -50,30 +66,34 @@ export async function GET(request) {
     return NextResponse.json({ error: "Failed to load responses." }, { status: 500 });
   }
 
-  return NextResponse.json({ data, total: count });
+  return NextResponse.json({
+    data: (data || []).map(mapUserRowForDashboard),
+    total: count,
+  });
 }
 
 const MAX_NOTE_LEN = 8000;
 const MAX_FIELD_LEN = 500;
 
-// PATCH /api/responses — { id, updates }
+// PATCH /api/responses — { id: user_id uuid, updates }
 export async function PATCH(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
-  const guard = await requireRole(50); // editor+
+  const guard = await requirePermission("edit_leads");
   if (guard.error) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   let body;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   const { id, updates } = body;
-  if (!id || !Number.isInteger(id)) return NextResponse.json({ error: "Missing or invalid id" }, { status: 400 });
+  if (!id || !isFunnelUserId(id)) {
+    return NextResponse.json({ error: "Missing or invalid id" }, { status: 400 });
+  }
   if (!updates || typeof updates !== "object") return NextResponse.json({ error: "Missing updates" }, { status: 400 });
 
-  // Only allow safe fields; server enforces types (client cannot coerce DB types)
-  const allowed = ["name", "email", "phone", "frequency", "is_flagged", "notes"];
   const safe = {};
+  const allowed = ["full_name", "name", "email", "phone", "frequency", "is_flagged", "notes"];
   for (const key of allowed) {
     if (updates[key] === undefined) continue;
     if (key === "is_flagged") {
@@ -91,33 +111,68 @@ export async function PATCH(request) {
     if (raw !== null && raw.length > maxLen) {
       return NextResponse.json({ error: `Field "${key}" is too long` }, { status: 422 });
     }
+    if (key === "name") {
+      safe.full_name = raw;
+      continue;
+    }
+    if (key === "full_name") {
+      safe.full_name = raw;
+      continue;
+    }
     safe[key] = raw;
   }
 
-  // "verified" requires admin+ (level 80)
+  if (safe.phone !== undefined) {
+    const e164 = toE164(safe.phone);
+    if (!e164) {
+      return NextResponse.json({ error: "phone must be a valid E.164 number" }, { status: 422 });
+    }
+    Object.assign(safe, persistUserPhone(e164));
+    delete safe.phone;
+  }
+
+  if (safe.email !== undefined) {
+    const em =
+      safe.email === null || safe.email === ""
+        ? persistUserEmail(null)
+        : persistUserEmail(String(safe.email));
+    safe.email_encrypted = em.email_encrypted;
+    safe.email_hash = em.email_hash;
+    delete safe.email;
+  }
+
   if (updates.verified !== undefined) {
-    const { getRoleLevel } = await import("@/lib/roles");
-    if (getRoleLevel(guard.user.role) < 80) {
-      return NextResponse.json({ error: "Only admins can change verification status" }, { status: 403 });
+    const grants = await getPermissionGrants();
+    if (!hasPermission(grants, guard.user.role, "verify_leads")) {
+      return NextResponse.json({ error: "You do not have permission to change verification status." }, { status: 403 });
     }
     if (typeof updates.verified !== "boolean") {
       return NextResponse.json({ error: "verified must be a boolean" }, { status: 422 });
     }
-    safe.verified = updates.verified;
+    const now = new Date().toISOString();
+    if (updates.verified) {
+      safe.verified_at = now;
+      safe.registration_step = "verified";
+    } else {
+      safe.verified_at = null;
+      safe.registration_step = "submitted";
+    }
   }
+
+  safe.updated_at = new Date().toISOString();
 
   const db = getDataClient();
 
   const { data: oldRow } = await db
-    .from("survey_responses")
+    .from(FUNNEL_USERS_TABLE)
     .select("*")
-    .eq("id", id)
+    .eq("user_id", id)
     .single();
 
   const { data, error } = await db
-    .from("survey_responses")
+    .from(FUNNEL_USERS_TABLE)
     .update(safe)
-    .eq("id", id)
+    .eq("user_id", id)
     .select()
     .single();
 
@@ -127,7 +182,7 @@ export async function PATCH(request) {
   }
 
   await logAction({
-    table: "survey_responses",
+    table: FUNNEL_USERS_TABLE,
     operation: "UPDATE",
     rowId: id,
     oldData: oldRow,
@@ -136,32 +191,34 @@ export async function PATCH(request) {
     actorRole: guard.user.role,
   });
 
-  return NextResponse.json({ data });
+  return NextResponse.json({ data: mapUserRowForDashboard(data) });
 }
 
-// DELETE /api/responses — { id }
+// DELETE /api/responses — { id: user_id uuid }
 export async function DELETE(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
-  const guard = await requireRole(80); // admin+
+  const guard = await requirePermission("delete_leads");
   if (guard.error) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   let body;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   const { id } = body;
-  if (!id || !Number.isInteger(id)) return NextResponse.json({ error: "Missing or invalid id" }, { status: 400 });
+  if (!id || !isFunnelUserId(id)) {
+    return NextResponse.json({ error: "Missing or invalid id" }, { status: 400 });
+  }
 
   const db = getDataClient();
 
   const { data: oldRow } = await db
-    .from("survey_responses")
+    .from(FUNNEL_USERS_TABLE)
     .select("*")
-    .eq("id", id)
+    .eq("user_id", id)
     .single();
 
-  const { error } = await db.from("survey_responses").delete().eq("id", id);
+  const { error } = await db.from(FUNNEL_USERS_TABLE).delete().eq("user_id", id);
 
   if (error) {
     console.error("[responses DELETE]", error.message);
@@ -169,7 +226,7 @@ export async function DELETE(request) {
   }
 
   await logAction({
-    table: "survey_responses",
+    table: FUNNEL_USERS_TABLE,
     operation: "DELETE",
     rowId: id,
     oldData: oldRow,

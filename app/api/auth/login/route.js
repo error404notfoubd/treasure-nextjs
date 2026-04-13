@@ -5,20 +5,19 @@ import { rejectIfNotDashboardHost } from "@/lib/dashboard/api-host";
 import { getAuthAdminClient } from "@/lib/supabase";
 import { getClientIP } from "@/lib/ip";
 import { checkAuthRouteRateLimit } from "@/lib/auth/route-rate-limit";
-import GAME_CONFIG from "@/lib/config";
-
-const { AUTH_API } = GAME_CONFIG;
+import { getAppSettings } from "@/lib/settings/app-settings";
 
 export async function POST(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
 
+  const auth = await getAppSettings();
   const ip = getClientIP(request);
   const rl = checkAuthRouteRateLimit(
     ip,
     "auth_login",
-    AUTH_API.LOGIN_RATE_LIMIT_MAX_PER_WINDOW,
-    AUTH_API.LOGIN_RATE_LIMIT_WINDOW_MS
+    auth.loginRateLimitMaxPerWindow,
+    auth.loginRateLimitWindowMs
   );
   if (rl.limited) {
     return NextResponse.json(

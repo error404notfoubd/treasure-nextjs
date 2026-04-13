@@ -1,7 +1,11 @@
 ﻿-- =============================================================================
---  CREATE ALL -- full schema (sql/Create/00 through 09 in order)
---  Regenerate after editing individual files: see sql/README.md
+--  CREATE ALL — run this single file on a fresh database (Supabase/Postgres).
+--  Creates: baseline, profiles, audit + rate limits + OTP events, funnel users,
+--  RPCs, app_settings, role_permission_grants, then verification SELECTs.
+--  Optional legacy (not included): sql/Create/02_survey_responses.sql,
+--  03_verification_codes.sql, 07_view_redacted.sql — apply separately if needed.
 -- =============================================================================
+
 -- SECTION: Create/00_schema_baseline.sql
 -- ═══════════════════════════════════════════════════════════════════════════
 --  00. SCHEMA BASELINE — least privilege; service_role + controlled access
@@ -103,12 +107,14 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  -- Role is never taken from user metadata (signUp options.data); only server defaults
+  -- and admin APIs may change role after insert.
   INSERT INTO public.profiles (id, email, full_name, role, status)
   VALUES (
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'full_name', ''),
-    coalesce(new.raw_user_meta_data->>'role', 'viewer'),
+    'viewer',
     'pending'
   );
   RETURN new;
@@ -264,219 +270,6 @@ REVOKE ALL ON TABLE public.profiles FROM PUBLIC;
 REVOKE ALL ON TABLE public.profiles FROM anon;
 GRANT SELECT, UPDATE ON TABLE public.profiles TO authenticated;
 GRANT ALL ON TABLE public.profiles TO service_role;
-
-
--- SECTION: Create/02_survey_responses.sql
--- ═══════════════════════════════════════════════════════════════════════════
---  02. SURVEY RESPONSES — submissions with verified flag
---  Depends on: 00_schema_baseline.sql
--- ═══════════════════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS public.survey_responses (
-  id              bigserial       PRIMARY KEY,
-  name            text            NOT NULL,
-  email           text,
-  phone           text            NOT NULL,
-  frequency       text,
-  ip_address      inet,
-  user_agent      text,
-  submitted_at    timestamptz     NOT NULL DEFAULT now(),
-  is_flagged      boolean         NOT NULL DEFAULT false,
-  notes           text,
-  verified        boolean         NOT NULL DEFAULT false,
-  otp_last_sent_at timestamptz
-);
-
--- Additive alters (safe to re-run)
-ALTER TABLE public.survey_responses
-  ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT false;
-ALTER TABLE public.survey_responses
-  ADD COLUMN IF NOT EXISTS otp_last_sent_at timestamptz;
-
-
--- ── Constraints (idempotent) ─────────────────
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint c
-    JOIN pg_class r ON r.oid = c.conrelid
-    JOIN pg_namespace n ON n.oid = r.relnamespace
-    WHERE n.nspname = 'public'
-      AND r.relname = 'survey_responses'
-      AND c.conname IN ('email_format', 'survey_responses_email_format')
-  ) THEN
-    ALTER TABLE public.survey_responses
-      ADD CONSTRAINT email_format CHECK (
-        email IS NULL OR email ~* '^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$'
-      );
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint c
-    JOIN pg_class r ON r.oid = c.conrelid
-    JOIN pg_namespace n ON n.oid = r.relnamespace
-    WHERE n.nspname = 'public'
-      AND r.relname = 'survey_responses'
-      AND c.conname IN ('name_length', 'survey_responses_name_length')
-  ) THEN
-    ALTER TABLE public.survey_responses
-      ADD CONSTRAINT name_length CHECK (
-        char_length(name) BETWEEN 2 AND 120
-      );
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint c
-    JOIN pg_class r ON r.oid = c.conrelid
-    JOIN pg_namespace n ON n.oid = r.relnamespace
-    WHERE n.nspname = 'public'
-      AND r.relname = 'survey_responses'
-      AND c.conname IN ('phone_length', 'survey_responses_phone_length')
-  ) THEN
-    ALTER TABLE public.survey_responses
-      ADD CONSTRAINT phone_length CHECK (
-        char_length(phone) BETWEEN 7 AND 20
-      );
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint c
-    JOIN pg_class r ON r.oid = c.conrelid
-    JOIN pg_namespace n ON n.oid = r.relnamespace
-    WHERE n.nspname = 'public'
-      AND r.relname = 'survey_responses'
-      AND c.conname IN ('frequency_values', 'survey_responses_frequency_values')
-  ) THEN
-    ALTER TABLE public.survey_responses
-      ADD CONSTRAINT frequency_values CHECK (
-        frequency IS NULL OR frequency = '' OR frequency IN (
-          'Daily — multiple times a day',
-          'Daily — once a day',
-          'A few times a week',
-          'Once a week',
-          'A few times a month',
-          'Rarely'
-        )
-      );
-  END IF;
-END $$;
-
-
--- ── Indexes ──────────────────────────────────
-CREATE UNIQUE INDEX IF NOT EXISTS idx_survey_email
-  ON public.survey_responses (lower(email))
-  WHERE email IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_survey_phone
-  ON public.survey_responses (regexp_replace(phone, '[^0-9+]', '', 'g'));
-
-CREATE INDEX IF NOT EXISTS idx_survey_submitted_at
-  ON public.survey_responses (submitted_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_survey_ip
-  ON public.survey_responses (ip_address);
-
-CREATE INDEX IF NOT EXISTS idx_survey_flagged
-  ON public.survey_responses (is_flagged) WHERE is_flagged = true;
-
-
--- ── RLS + Grants ─────────────────────────────
-ALTER TABLE public.survey_responses ENABLE ROW LEVEL SECURITY;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename = 'survey_responses'
-      AND policyname = 'deny_anon_all_survey'
-  ) THEN
-    CREATE POLICY deny_anon_all_survey
-      ON public.survey_responses AS RESTRICTIVE
-      FOR ALL
-      TO anon, authenticated
-      USING (false) WITH CHECK (false);
-  END IF;
-END $$;
-
-REVOKE ALL ON TABLE public.survey_responses FROM PUBLIC;
-REVOKE ALL ON TABLE public.survey_responses FROM anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.survey_responses TO service_role;
-GRANT USAGE, SELECT ON SEQUENCE public.survey_responses_id_seq TO service_role;
-
--- No DB trigger on survey_responses (audit is API-owned); remove legacy trigger if present
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM pg_trigger t
-    JOIN pg_class c ON c.oid = t.tgrelid
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = 'public'
-      AND c.relname = 'survey_responses'
-      AND t.tgname = 'trg_survey_audit'
-      AND NOT t.tgisinternal
-  ) THEN
-    DROP TRIGGER trg_survey_audit ON public.survey_responses;
-  END IF;
-END $$;
-
-
--- SECTION: Create/03_verification_codes.sql
--- ═══════════════════════════════════════════════════════════════════════════
---  03. VERIFICATION CODES — SMS OTP metadata; code stored as hash
---  Depends on: 02_survey_responses.sql (FK → survey_responses.id)
--- ═══════════════════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS public.verification_codes (
-  id                  uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  survey_response_id  bigint      NOT NULL REFERENCES public.survey_responses (id) ON DELETE CASCADE,
-  phone               text        NOT NULL,
-  code                text        NOT NULL,
-  expires_at          timestamptz NOT NULL,
-  used                boolean     NOT NULL DEFAULT false,
-  attempts            integer     NOT NULL DEFAULT 0,
-  created_at          timestamptz NOT NULL DEFAULT now()
-);
-
-
--- ── Indexes ──────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_verification_codes_phone_active
-  ON public.verification_codes (phone, created_at DESC)
-  WHERE used = false;
-
-
--- ── RLS + Grants ─────────────────────────────
-ALTER TABLE public.verification_codes ENABLE ROW LEVEL SECURITY;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename = 'verification_codes'
-      AND policyname = 'deny_anon_all_verification_codes'
-  ) THEN
-    CREATE POLICY deny_anon_all_verification_codes
-      ON public.verification_codes AS RESTRICTIVE
-      FOR ALL
-      TO anon, authenticated
-      USING (false) WITH CHECK (false);
-  END IF;
-END $$;
-
-REVOKE ALL ON TABLE public.verification_codes FROM PUBLIC;
-REVOKE ALL ON TABLE public.verification_codes FROM anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.verification_codes TO service_role;
 
 
 -- SECTION: Create/04_audit_log.sql
@@ -663,35 +456,168 @@ GRANT SELECT, INSERT, DELETE ON TABLE public.rate_limit_events TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.rate_limit_events_id_seq TO service_role;
 
 
--- SECTION: Create/07_view_redacted.sql
 -- ═══════════════════════════════════════════════════════════════════════════
---  07. SECURE VIEW — invoker; inherits caller RLS
---  Depends on: 02_survey_responses.sql
+--  OTP send events — per phone_hash rolling window (Prelude SMS cap)
 -- ═══════════════════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE VIEW public.survey_responses_redacted
-WITH (security_invoker = true) AS
-SELECT
-  id,
-  name,
-  regexp_replace(email, '^[^@]+', '****') AS email,
-  regexp_replace(phone, '\d(?=\d{3})', '*', 'g') AS phone,
-  frequency,
-  split_part(ip_address::text, '.', 1) || '.***.***.***' AS ip_address,
-  submitted_at,
-  is_flagged,
-  verified
-FROM public.survey_responses;
+CREATE TABLE IF NOT EXISTS public.otp_send_events (
+  id          bigserial   PRIMARY KEY,
+  phone_hash  text        NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
 
-REVOKE ALL ON TABLE public.survey_responses_redacted FROM PUBLIC;
-REVOKE ALL ON TABLE public.survey_responses_redacted FROM anon, authenticated;
-GRANT SELECT ON TABLE public.survey_responses_redacted TO service_role;
+CREATE INDEX IF NOT EXISTS idx_otp_send_phone_time
+  ON public.otp_send_events (phone_hash, created_at DESC);
+
+ALTER TABLE public.otp_send_events ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'otp_send_events'
+      AND policyname = 'deny_anon_all_otp_send_events'
+  ) THEN
+    CREATE POLICY deny_anon_all_otp_send_events
+      ON public.otp_send_events AS RESTRICTIVE
+      FOR ALL
+      TO anon, authenticated
+      USING (false) WITH CHECK (false);
+  END IF;
+END $$;
+
+REVOKE ALL ON TABLE public.otp_send_events FROM PUBLIC;
+REVOKE ALL ON TABLE public.otp_send_events FROM anon, authenticated;
+GRANT SELECT, INSERT, DELETE ON TABLE public.otp_send_events TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.otp_send_events_id_seq TO service_role;
+
+
+-- SECTION: Create/10_users.sql
+-- ═══════════════════════════════════════════════════════════════════════════
+--  10. FUNNEL USERS — gamified acquisition (game + dashboard; not auth.users)
+--  Depends on: 00_schema_baseline.sql
+--  Run before 08_helper_functions.sql (RPCs reference this table).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  CREATE TYPE public.registration_step AS ENUM (
+    'viewed',
+    'started',
+    'submitted',
+    'verified'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS public.users (
+  user_id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name           text NOT NULL,
+  phone_hash          text NOT NULL,
+  phone_encrypted     text NOT NULL,
+  email_hash          text,
+  email_encrypted     text,
+  verified_at         timestamptz,
+  otp_last_sent_at    timestamptz,
+  utm_source          text,
+  utm_campaign        text,
+  utm_medium          text,
+  game_score          integer NOT NULL DEFAULT 0,
+  searches_count      integer NOT NULL DEFAULT 0,
+  registration_step   public.registration_step NOT NULL DEFAULT 'submitted',
+  consent_marketing   boolean NOT NULL DEFAULT false,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  frequency           text,
+  is_flagged          boolean NOT NULL DEFAULT false,
+  notes               text,
+  ip_address          inet,
+  user_agent          text,
+
+  CONSTRAINT users_full_name_len CHECK (char_length(full_name) BETWEEN 2 AND 120),
+  CONSTRAINT users_phone_enc_len CHECK (char_length(phone_encrypted) BETWEEN 7 AND 4096),
+  CONSTRAINT users_email_enc_len CHECK (
+    email_encrypted IS NULL OR (char_length(email_encrypted) BETWEEN 1 AND 4096)
+  )
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class r ON r.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = r.relnamespace
+    WHERE n.nspname = 'public'
+      AND r.relname = 'users'
+      AND c.conname = 'users_frequency_values'
+  ) THEN
+    ALTER TABLE public.users
+      ADD CONSTRAINT users_frequency_values CHECK (
+        frequency IS NULL OR frequency = '' OR frequency IN (
+          'Daily — multiple times a day',
+          'Daily — once a day',
+          'A few times a week',
+          'Once a week',
+          'A few times a month',
+          'Rarely'
+        )
+      );
+  END IF;
+END $$;
+
+DROP INDEX IF EXISTS idx_users_email_hash_verified;
+CREATE UNIQUE INDEX idx_users_email_hash_verified
+  ON public.users (email_hash)
+  WHERE email_hash IS NOT NULL AND verified_at IS NOT NULL;
+
+DROP INDEX IF EXISTS idx_users_phone_hash_verified;
+CREATE UNIQUE INDEX idx_users_phone_hash_verified
+  ON public.users (phone_hash)
+  WHERE verified_at IS NOT NULL;
+
+DROP INDEX IF EXISTS idx_users_phone_unverified;
+CREATE INDEX IF NOT EXISTS idx_users_phone_unverified
+  ON public.users (phone_hash)
+  WHERE verified_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_users_created_at
+  ON public.users (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_users_flagged
+  ON public.users (is_flagged) WHERE is_flagged = true;
+
+CREATE INDEX IF NOT EXISTS idx_users_ip
+  ON public.users (ip_address);
+
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'users'
+      AND policyname = 'deny_anon_all_users'
+  ) THEN
+    CREATE POLICY deny_anon_all_users
+      ON public.users AS RESTRICTIVE
+      FOR ALL
+      TO anon, authenticated
+      USING (false) WITH CHECK (false);
+  END IF;
+END $$;
+
+REVOKE ALL ON TABLE public.users FROM PUBLIC;
+REVOKE ALL ON TABLE public.users FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.users TO service_role;
 
 
 -- SECTION: Create/08_helper_functions.sql
 -- ═══════════════════════════════════════════════════════════════════════════
 --  08. HELPER FUNCTIONS + EXECUTE GRANTS
---  Depends on: all tables (01–06)
+--  Depends on: public.profiles (01), audit/rate/otp tables (04–06), public.users (10)
 -- ═══════════════════════════════════════════════════════════════════════════
 
 CREATE OR REPLACE FUNCTION public.get_user_role(user_id uuid)
@@ -704,7 +630,7 @@ AS $$
   SELECT role FROM public.profiles WHERE id = user_id;
 $$;
 
-CREATE OR REPLACE FUNCTION public.fn_email_exists(p_email text)
+CREATE OR REPLACE FUNCTION public.fn_email_exists(p_email_hash text)
 RETURNS boolean
 LANGUAGE sql
 SECURITY DEFINER
@@ -712,12 +638,14 @@ STABLE
 SET search_path = public
 AS $$
   SELECT EXISTS (
-    SELECT 1 FROM public.survey_responses
-    WHERE lower(email) = lower(p_email)
+    SELECT 1 FROM public.users u
+    WHERE u.email_hash IS NOT NULL
+      AND u.email_hash = p_email_hash
+      AND u.verified_at IS NOT NULL
   );
 $$;
 
-CREATE OR REPLACE FUNCTION public.fn_phone_exists(p_phone text)
+CREATE OR REPLACE FUNCTION public.fn_phone_exists(p_phone_hash text)
 RETURNS boolean
 LANGUAGE sql
 SECURITY DEFINER
@@ -725,24 +653,25 @@ STABLE
 SET search_path = public
 AS $$
   SELECT EXISTS (
-    SELECT 1 FROM public.survey_responses
-    WHERE regexp_replace(phone, '[^0-9+]', '', 'g') =
-          regexp_replace(p_phone, '[^0-9+]', '', 'g')
+    SELECT 1 FROM public.users u
+    WHERE u.phone_hash IS NOT NULL
+      AND u.phone_hash = p_phone_hash
+      AND u.verified_at IS NOT NULL
   );
 $$;
 
-CREATE OR REPLACE FUNCTION public.fn_survey_latest_for_normalized_phone(p_phone text)
-RETURNS TABLE (survey_id bigint, is_verified boolean)
+CREATE OR REPLACE FUNCTION public.fn_survey_latest_for_normalized_phone(p_phone_hash text)
+RETURNS TABLE (user_id uuid, is_verified boolean)
 LANGUAGE sql
 SECURITY DEFINER
 STABLE
 SET search_path = public
 AS $$
-  SELECT s.id, s.verified
-  FROM public.survey_responses s
-  WHERE regexp_replace(s.phone, '[^0-9+]', '', 'g') =
-        regexp_replace(p_phone, '[^0-9+]', '', 'g')
-  ORDER BY s.submitted_at DESC
+  SELECT u.user_id, (u.verified_at IS NOT NULL)
+  FROM public.users u
+  WHERE u.phone_hash IS NOT NULL
+    AND u.phone_hash = p_phone_hash
+  ORDER BY u.created_at DESC
   LIMIT 1;
 $$;
 
@@ -803,6 +732,39 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.fn_check_and_record_otp_phone_send(
+  p_phone_hash   text,
+  p_max          int,
+  p_window_secs  int
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  cnt int;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext('otp_phone:' || p_phone_hash)::bigint);
+
+  SELECT count(*)::int INTO cnt
+  FROM public.otp_send_events
+  WHERE phone_hash = p_phone_hash
+    AND created_at > now() - (interval '1 second' * p_window_secs);
+
+  IF cnt >= p_max THEN
+    RETURN false;
+  END IF;
+
+  INSERT INTO public.otp_send_events (phone_hash)
+  VALUES (p_phone_hash);
+
+  RETURN true;
+END;
+$$;
+
+-- OTP caps use Prelude + public.otp_send_events (fn_check_and_record_otp_phone_send).
+-- This RPC is kept for compatibility; it does not count Prelude sends (no phone in DB).
 CREATE OR REPLACE FUNCTION public.fn_otp_send_count_for_phone(p_phone text, p_window_mins int)
 RETURNS int
 LANGUAGE sql
@@ -810,11 +772,7 @@ SECURITY DEFINER
 STABLE
 SET search_path = public
 AS $$
-  SELECT count(*)::int
-  FROM public.verification_codes v
-  WHERE regexp_replace(v.phone, '[^0-9+]', '', 'g') =
-        regexp_replace(p_phone, '[^0-9+]', '', 'g')
-    AND v.created_at > now() - (p_window_mins::text || ' minutes')::interval;
+  SELECT 0::int;
 $$;
 
 CREATE OR REPLACE FUNCTION public.fn_clean_rate_limit_events()
@@ -838,6 +796,7 @@ REVOKE ALL ON FUNCTION public.fn_survey_latest_for_normalized_phone(text) FROM P
 REVOKE ALL ON FUNCTION public.fn_ip_submission_count(inet, int) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.fn_clean_rate_log() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.fn_check_and_record_rate_limit(inet, text, int, int) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_check_and_record_otp_phone_send(text, int, int) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.fn_otp_send_count_for_phone(text, int) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.fn_clean_rate_limit_events() FROM PUBLIC;
 
@@ -847,6 +806,7 @@ GRANT EXECUTE ON FUNCTION public.fn_survey_latest_for_normalized_phone(text) TO 
 GRANT EXECUTE ON FUNCTION public.fn_ip_submission_count(inet, int) TO service_role;
 GRANT EXECUTE ON FUNCTION public.fn_clean_rate_log() TO service_role;
 GRANT EXECUTE ON FUNCTION public.fn_check_and_record_rate_limit(inet, text, int, int) TO service_role;
+GRANT EXECUTE ON FUNCTION public.fn_check_and_record_otp_phone_send(text, int, int) TO service_role;
 GRANT EXECUTE ON FUNCTION public.fn_otp_send_count_for_phone(text, int) TO service_role;
 GRANT EXECUTE ON FUNCTION public.fn_clean_rate_limit_events() TO service_role;
 
@@ -856,13 +816,189 @@ REVOKE EXECUTE ON FUNCTION public.fn_survey_latest_for_normalized_phone(text) FR
 REVOKE EXECUTE ON FUNCTION public.fn_ip_submission_count(inet, int) FROM anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.fn_clean_rate_log() FROM anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.fn_check_and_record_rate_limit(inet, text, int, int) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_check_and_record_otp_phone_send(text, int, int) FROM anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.fn_otp_send_count_for_phone(text, int) FROM anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.fn_clean_rate_limit_events() FROM anon, authenticated;
 
 
+-- SECTION: Create/11_app_settings.sql
+-- ═══════════════════════════════════════════════════════════════════════════
+--  11. APP SETTINGS — single-row tunables (game economy, auth, survey caps)
+--  Depends on: 00_schema_baseline.sql
+--  Read/write via service_role only (Next.js API + dashboard owner UI).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS public.app_settings (
+  id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+
+  start_credits integer NOT NULL DEFAULT 15,
+  bonus_credits integer NOT NULL DEFAULT 100,
+  rtp smallint NOT NULL DEFAULT 50,
+  jackpot_rate smallint NOT NULL DEFAULT 0,
+  four_of_a_kind_rate smallint NOT NULL DEFAULT 3,
+  symbol_weights jsonb NOT NULL DEFAULT '{"key":28,"crystal":20,"map":18,"compass":16,"shield":12,"scroll":9,"star":6}'::jsonb,
+  find_payouts jsonb NOT NULL DEFAULT '{"great_find":4,"good_find":2}'::jsonb,
+  bet_presets jsonb NOT NULL DEFAULT '[1,5,10,15,25,50]'::jsonb,
+  reel_stop_delays jsonb NOT NULL DEFAULT '[860,1100,1340,1580,1820]'::jsonb,
+
+  survey_request_body_max_chars integer NOT NULL DEFAULT 8192,
+  otp_sends_per_phone_max integer NOT NULL DEFAULT 3,
+  otp_sends_per_phone_window_ms bigint NOT NULL DEFAULT 3600000,
+  survey_control_phone_e164 text,
+
+  login_rate_limit_max_per_window integer NOT NULL DEFAULT 15,
+  login_rate_limit_window_ms integer NOT NULL DEFAULT 60000,
+  signup_rate_limit_max_per_window integer NOT NULL DEFAULT 10,
+  /** Milliseconds; bigint so values up to 30 days (2_592_000_000) fit (exceeds int4 max). */
+  signup_rate_limit_window_ms bigint NOT NULL DEFAULT 3600000,
+  check_availability_max_per_window integer NOT NULL DEFAULT 20,
+  check_availability_window_ms integer NOT NULL DEFAULT 60000,
+  password_min_length smallint NOT NULL DEFAULT 8,
+  default_signup_role text NOT NULL DEFAULT 'viewer',
+  auth_ui_check_debounce_ms integer NOT NULL DEFAULT 500,
+
+  updated_at timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT app_settings_start_credits_nonneg CHECK (start_credits >= 0 AND start_credits <= 100000),
+  CONSTRAINT app_settings_bonus_credits_nonneg CHECK (bonus_credits >= 0 AND bonus_credits <= 100000),
+  CONSTRAINT app_settings_rtp CHECK (rtp >= 0 AND rtp <= 100),
+  CONSTRAINT app_settings_rates CHECK (
+    jackpot_rate >= 0 AND jackpot_rate <= 100
+    AND four_of_a_kind_rate >= 0 AND four_of_a_kind_rate <= 100
+  ),
+  CONSTRAINT app_settings_survey_body CHECK (survey_request_body_max_chars >= 1024 AND survey_request_body_max_chars <= 1048576),
+  CONSTRAINT app_settings_otp CHECK (
+    otp_sends_per_phone_max >= 1 AND otp_sends_per_phone_max <= 100
+    AND otp_sends_per_phone_window_ms >= 60000
+    AND otp_sends_per_phone_window_ms <= (86400000::bigint * 7)
+  ),
+  CONSTRAINT app_settings_password_len CHECK (password_min_length >= 6 AND password_min_length <= 128),
+  CONSTRAINT app_settings_default_role CHECK (default_signup_role IN ('viewer', 'editor', 'admin')),
+  CONSTRAINT app_settings_debounce CHECK (auth_ui_check_debounce_ms >= 100 AND auth_ui_check_debounce_ms <= 10000),
+  CONSTRAINT app_settings_login_rl CHECK (
+    login_rate_limit_max_per_window >= 1 AND login_rate_limit_max_per_window <= 10000
+    AND login_rate_limit_window_ms >= 1000 AND login_rate_limit_window_ms <= 86400000
+  ),
+  CONSTRAINT app_settings_signup_rl CHECK (
+    signup_rate_limit_max_per_window >= 1 AND signup_rate_limit_max_per_window <= 10000
+    AND signup_rate_limit_window_ms >= 1000
+    AND signup_rate_limit_window_ms <= (86400000::bigint * 30)
+  ),
+  CONSTRAINT app_settings_check_rl CHECK (
+    check_availability_max_per_window >= 1 AND check_availability_max_per_window <= 10000
+    AND check_availability_window_ms >= 1000 AND check_availability_window_ms <= 86400000
+  )
+);
+
+INSERT INTO public.app_settings (id) VALUES (1)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'app_settings'
+      AND policyname = 'deny_anon_all_app_settings'
+  ) THEN
+    CREATE POLICY deny_anon_all_app_settings
+      ON public.app_settings AS RESTRICTIVE
+      FOR ALL
+      TO anon, authenticated
+      USING (false) WITH CHECK (false);
+  END IF;
+END $$;
+
+REVOKE ALL ON TABLE public.app_settings FROM PUBLIC;
+REVOKE ALL ON TABLE public.app_settings FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.app_settings TO service_role;
+
+CREATE OR REPLACE FUNCTION public.app_settings_set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_app_settings_updated ON public.app_settings;
+CREATE TRIGGER trg_app_settings_updated
+  BEFORE UPDATE ON public.app_settings
+  FOR EACH ROW
+  EXECUTE FUNCTION public.app_settings_set_updated_at();
+
+REVOKE ALL ON FUNCTION public.app_settings_set_updated_at() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.app_settings_set_updated_at() TO service_role;
+
+
+-- SECTION: Create/12_role_permission_grants.sql
+-- ═══════════════════════════════════════════════════════════════════════════
+--  12. ROLE PERMISSION GRANTS — which dashboard roles may perform each action
+--  Depends on: 00_schema_baseline.sql
+--  Edited only via Next.js API (owner); service_role only.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+DROP TABLE IF EXISTS public.role_privilege_levels CASCADE;
+DROP FUNCTION IF EXISTS public.role_privilege_levels_set_updated_at() CASCADE;
+
+CREATE TABLE IF NOT EXISTS public.role_permission_grants (
+  permission_key text NOT NULL,
+  role text NOT NULL CHECK (role IN ('owner', 'admin', 'editor', 'viewer')),
+  PRIMARY KEY (permission_key, role)
+);
+
+INSERT INTO public.role_permission_grants (permission_key, role) VALUES
+  ('view_leads', 'viewer'),
+  ('view_leads', 'editor'),
+  ('view_leads', 'admin'),
+  ('view_leads', 'owner'),
+  ('edit_leads', 'editor'),
+  ('edit_leads', 'admin'),
+  ('edit_leads', 'owner'),
+  ('verify_leads', 'admin'),
+  ('verify_leads', 'owner'),
+  ('delete_leads', 'admin'),
+  ('delete_leads', 'owner'),
+  ('approve_signups', 'admin'),
+  ('approve_signups', 'owner'),
+  ('manage_dashboard_users', 'admin'),
+  ('manage_dashboard_users', 'owner'),
+  ('view_audit', 'admin'),
+  ('view_audit', 'owner'),
+  ('modify_system_settings', 'owner')
+ON CONFLICT DO NOTHING;
+
+ALTER TABLE public.role_permission_grants ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'role_permission_grants'
+      AND policyname = 'deny_anon_all_role_permission_grants'
+  ) THEN
+    CREATE POLICY deny_anon_all_role_permission_grants
+      ON public.role_permission_grants AS RESTRICTIVE
+      FOR ALL
+      TO anon, authenticated
+      USING (false) WITH CHECK (false);
+  END IF;
+END $$;
+
+REVOKE ALL ON TABLE public.role_permission_grants FROM PUBLIC;
+REVOKE ALL ON TABLE public.role_permission_grants FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.role_permission_grants TO service_role;
+
+
 -- SECTION: Create/09_verification_queries.sql
 -- ═══════════════════════════════════════════════════════════════════════════
---  09. VERIFICATION QUERIES — confirm RLS + policies after running 00–08
+--  09. VERIFICATION QUERIES — confirm RLS + policies after bundled create scripts
 -- ═══════════════════════════════════════════════════════════════════════════
 
 SELECT tablename, rowsecurity AS rls_enabled
@@ -870,11 +1006,13 @@ FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename IN (
     'profiles',
-    'survey_responses',
-    'verification_codes',
+    'users',
     'audit_log',
     'rate_limit_log',
-    'rate_limit_events'
+    'rate_limit_events',
+    'otp_send_events',
+    'app_settings',
+    'role_permission_grants'
   )
 ORDER BY tablename;
 
@@ -882,4 +1020,3 @@ SELECT tablename, policyname, permissive, roles, cmd
 FROM pg_policies
 WHERE schemaname = 'public'
 ORDER BY tablename, policyname;
-

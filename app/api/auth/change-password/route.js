@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { getAuthAdminClient } from "@/lib/supabase";
 import { rejectIfNotDashboardHost } from "@/lib/dashboard/api-host";
 import { validatePasswordStrength } from "@/lib/auth/password";
+import { getAppSettings } from "@/lib/settings/app-settings";
 
 const attempts = new Map();
 const MAX_ATTEMPTS = 5;
@@ -54,6 +55,7 @@ export async function POST(request) {
     }
 
     const { currentPassword, newPassword } = await request.json();
+    const authSettings = await getAppSettings();
 
     if (!currentPassword || !newPassword) {
       return NextResponse.json(
@@ -62,7 +64,7 @@ export async function POST(request) {
       );
     }
 
-    const pwErrors = validatePasswordStrength(newPassword);
+    const pwErrors = validatePasswordStrength(newPassword, authSettings.passwordMinLength);
     if (pwErrors.length > 0) {
       return NextResponse.json(
         { error: pwErrors[0] },

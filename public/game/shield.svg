@@ -1,0 +1,216 @@
+<svg width="100%" viewBox="0 0 360 440" xmlns="http://www.w3.org/2000/svg">
+<title>Rustic shield</title>
+<defs>
+<linearGradient id="sBody" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="#7E5634"/>
+<stop offset="20%" stop-color="#6E4628"/>
+<stop offset="45%" stop-color="#5E381E"/>
+<stop offset="70%" stop-color="#502E16"/>
+<stop offset="100%" stop-color="#3A1E0C"/>
+</linearGradient>
+<linearGradient id="sHL" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0%" stop-color="#8A6438" stop-opacity="0.5"/>
+<stop offset="50%" stop-color="#8A6438" stop-opacity="0"/>
+</linearGradient>
+<linearGradient id="sBand" x1="0" y1="0" x2="0.3" y2="1">
+<stop offset="0%" stop-color="#58483A"/>
+<stop offset="25%" stop-color="#4A3C2E"/>
+<stop offset="55%" stop-color="#3E3228"/>
+<stop offset="100%" stop-color="#2C221C"/>
+</linearGradient>
+<linearGradient id="sBrass" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="#DABB60"/>
+<stop offset="30%" stop-color="#C4960E"/>
+<stop offset="70%" stop-color="#A07010"/>
+<stop offset="100%" stop-color="#8B6914"/>
+</linearGradient>
+<linearGradient id="sBrassHL" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="#F0D868"/>
+<stop offset="100%" stop-color="#C4A030"/>
+</linearGradient>
+<linearGradient id="sCenter" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#C4960E"/>
+<stop offset="40%" stop-color="#A07010"/>
+<stop offset="100%" stop-color="#7A5C10"/>
+</linearGradient>
+<linearGradient id="sWoodV" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#7E5634"/>
+<stop offset="50%" stop-color="#5E381E"/>
+<stop offset="100%" stop-color="#3A1E0C"/>
+</linearGradient>
+<clipPath id="shieldClip">
+<path d="M180,20 C220,20 280,25 320,40 C335,46 340,55 340,70 L340,180 C340,260 300,330 180,410 C60,330 20,260 20,180 L20,70 C20,55 25,46 40,40 C80,25 140,20 180,20 Z"/>
+</clipPath>
+</defs>
+
+<!-- Shadow -->
+<ellipse cx="180" cy="420" rx="120" ry="14" fill="#0A0400" opacity="0.15"/>
+
+<!-- Main shield shape -->
+<path d="M180,20 C220,20 280,25 320,40 C335,46 340,55 340,70 L340,180 C340,260 300,330 180,410 C60,330 20,260 20,180 L20,70 C20,55 25,46 40,40 C80,25 140,20 180,20 Z" fill="url(#sBody)" stroke="#1E1008" stroke-width="2.5"/>
+
+<!-- Wood plank lines (vertical) -->
+<g clip-path="url(#shieldClip)" opacity="0.35">
+<line x1="100" y1="20" x2="100" y2="410" stroke="#30180A" stroke-width="0.8"/>
+<line x1="140" y1="20" x2="140" y2="410" stroke="#30180A" stroke-width="0.7"/>
+<line x1="180" y1="20" x2="180" y2="410" stroke="#30180A" stroke-width="0.8"/>
+<line x1="220" y1="20" x2="220" y2="410" stroke="#30180A" stroke-width="0.7"/>
+<line x1="260" y1="20" x2="260" y2="410" stroke="#30180A" stroke-width="0.8"/>
+</g>
+
+<!-- Wood grain -->
+<g clip-path="url(#shieldClip)" opacity="0.18" fill="none">
+<path d="M30 60 Q80 55 130 62 Q180 68 230 60 Q280 53 330 62" stroke="#8A6038" stroke-width="0.5"/>
+<path d="M30 80 Q90 75 150 82 Q210 88 270 80 Q310 74 330 82" stroke="#6A4020" stroke-width="0.4"/>
+<path d="M25 110 Q80 105 140 112 Q200 118 260 110 Q310 104 335 112" stroke="#8A6038" stroke-width="0.5"/>
+<path d="M25 130 Q90 125 150 132 Q210 138 270 130 Q310 124 335 132" stroke="#6A4020" stroke-width="0.4"/>
+<path d="M25 160 Q80 155 140 162 Q200 168 260 160 Q310 154 335 162" stroke="#8A6038" stroke-width="0.5"/>
+<path d="M25 180 Q90 175 150 182 Q210 188 270 180 Q310 174 335 182" stroke="#6A4020" stroke-width="0.4"/>
+<path d="M25 210 Q80 205 140 212 Q200 218 260 210 Q300 204 330 212" stroke="#8A6038" stroke-width="0.5"/>
+<path d="M30 240 Q90 235 150 242 Q200 248 250 240 Q290 234 320 242" stroke="#6A4020" stroke-width="0.4"/>
+<path d="M35 270 Q90 265 140 272 Q190 278 240 270 Q280 264 310 272" stroke="#8A6038" stroke-width="0.5"/>
+<path d="M40 300 Q90 295 140 302 Q190 308 240 300 Q270 294 300 302" stroke="#6A4020" stroke-width="0.4"/>
+<path d="M55 330 Q100 325 140 332 Q180 338 220 330 Q255 324 280 332" stroke="#8A6038" stroke-width="0.5"/>
+<path d="M70 355 Q110 350 150 357 Q180 362 210 355 Q240 350 260 358" stroke="#6A4020" stroke-width="0.4"/>
+<path d="M90 375 Q120 370 150 377 Q180 382 200 375 Q220 370 240 378" stroke="#8A6038" stroke-width="0.45"/>
+</g>
+
+<!-- Wood knots -->
+<g clip-path="url(#shieldClip)">
+<ellipse cx="120" cy="140" rx="7" ry="5" fill="none" stroke="#3A1E0C" stroke-width="0.8" opacity="0.2" transform="rotate(8 120 140)"/>
+<ellipse cx="120" cy="140" rx="3.5" ry="2.5" fill="#3A1E0C" opacity="0.06" transform="rotate(8 120 140)"/>
+<ellipse cx="250" cy="280" rx="6" ry="4" fill="none" stroke="#3A1E0C" stroke-width="0.7" opacity="0.18" transform="rotate(-10 250 280)"/>
+<ellipse cx="250" cy="280" rx="3" ry="2" fill="#3A1E0C" opacity="0.05" transform="rotate(-10 250 280)"/>
+<ellipse cx="80" cy="250" rx="5" ry="3.5" fill="none" stroke="#3A1E0C" stroke-width="0.6" opacity="0.15" transform="rotate(5 80 250)"/>
+</g>
+
+<!-- Left highlight -->
+<path d="M180,20 C140,20 80,25 40,40 C25,46 20,55 20,70 L20,180 C20,200 22,218 28,236" fill="url(#sHL)" opacity="0.3" clip-path="url(#shieldClip)"/>
+
+<!-- Weathering -->
+<g clip-path="url(#shieldClip)" opacity="0.06" stroke="#1A0E04" fill="none">
+<line x1="70" y1="50" x2="73" y2="120" stroke-width="0.6"/>
+<line x1="250" y1="80" x2="252" y2="150" stroke-width="0.5"/>
+<line x1="160" y1="200" x2="163" y2="260" stroke-width="0.5"/>
+<line x1="290" y1="150" x2="292" y2="210" stroke-width="0.4"/>
+<circle cx="90" cy="310" r="1.5" stroke-width="0.5"/>
+<circle cx="270" cy="190" r="1.2" stroke-width="0.4"/>
+</g>
+
+<!-- ===== IRON RIM ===== -->
+<path d="M180,20 C220,20 280,25 320,40 C335,46 340,55 340,70 L340,180 C340,260 300,330 180,410 C60,330 20,260 20,180 L20,70 C20,55 25,46 40,40 C80,25 140,20 180,20 Z" fill="none" stroke="url(#sBand)" stroke-width="8"/>
+<!-- Outer highlight -->
+<path d="M180,20 C220,20 280,25 320,40 C335,46 340,55 340,70 L340,180 C340,260 300,330 180,410 C60,330 20,260 20,180 L20,70 C20,55 25,46 40,40 C80,25 140,20 180,20 Z" fill="none" stroke="#5A4A3A" stroke-width="1" opacity="0.3"/>
+
+<!-- Rim rivets -->
+<g>
+<!-- Top row -->
+<circle cx="100" cy="30" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="100" cy="29.5" r="2.2" fill="#555"/><circle cx="99" cy="28.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="140" cy="24" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="140" cy="23.5" r="2.2" fill="#555"/><circle cx="139" cy="22.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="180" cy="22" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="180" cy="21.5" r="2.2" fill="#555"/><circle cx="179" cy="20.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="220" cy="24" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="220" cy="23.5" r="2.2" fill="#555"/><circle cx="219" cy="22.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="260" cy="30" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="260" cy="29.5" r="2.2" fill="#555"/><circle cx="259" cy="28.5" r="0.8" fill="#6A6A6A"/>
+<!-- Upper sides -->
+<circle cx="310" cy="44" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="310" cy="43.5" r="2.2" fill="#555"/><circle cx="309" cy="42.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="50" cy="44" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="50" cy="43.5" r="2.2" fill="#555"/><circle cx="49" cy="42.5" r="0.8" fill="#6A6A6A"/>
+<!-- Sides -->
+<circle cx="338" cy="100" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="338" cy="99.5" r="2.2" fill="#555"/><circle cx="337" cy="98.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="22" cy="100" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="22" cy="99.5" r="2.2" fill="#555"/><circle cx="21" cy="98.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="338" cy="160" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="338" cy="159.5" r="2.2" fill="#555"/><circle cx="337" cy="158.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="22" cy="160" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="22" cy="159.5" r="2.2" fill="#555"/><circle cx="21" cy="158.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="335" cy="220" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="335" cy="219.5" r="2.2" fill="#555"/><circle cx="334" cy="218.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="25" cy="220" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="25" cy="219.5" r="2.2" fill="#555"/><circle cx="24" cy="218.5" r="0.8" fill="#6A6A6A"/>
+<!-- Lower sides -->
+<circle cx="320" cy="275" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="320" cy="274.5" r="2.2" fill="#555"/><circle cx="319" cy="273.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="40" cy="275" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="40" cy="274.5" r="2.2" fill="#555"/><circle cx="39" cy="273.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="290" cy="320" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="290" cy="319.5" r="2.2" fill="#555"/><circle cx="289" cy="318.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="70" cy="320" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="70" cy="319.5" r="2.2" fill="#555"/><circle cx="69" cy="318.5" r="0.8" fill="#6A6A6A"/>
+<!-- Bottom -->
+<circle cx="245" cy="360" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="245" cy="359.5" r="2.2" fill="#555"/><circle cx="244" cy="358.5" r="0.8" fill="#6A6A6A"/>
+<circle cx="115" cy="360" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="115" cy="359.5" r="2.2" fill="#555"/><circle cx="114" cy="358.5" r="0.8" fill="#6A6A6A"/>
+<!-- Tip -->
+<circle cx="180" cy="400" r="5" fill="#404040" stroke="#222" stroke-width="1.2"/><circle cx="180" cy="399.5" r="2.2" fill="#555"/><circle cx="179" cy="398.5" r="0.8" fill="#6A6A6A"/>
+</g>
+
+<!-- ===== HORIZONTAL IRON BAND ===== -->
+<path d="M22,155 L338,155" stroke="url(#sBand)" stroke-width="14" stroke-linecap="round" clip-path="url(#shieldClip)"/>
+<path d="M22,155 L338,155" stroke="#5A4A3A" stroke-width="0.6" opacity="0.2" clip-path="url(#shieldClip)"/>
+<!-- Rust pitting on band -->
+<g clip-path="url(#shieldClip)" opacity="0.15">
+<rect x="60" y="150" width="12" height="4" rx="1" fill="#5A4A38"/>
+<rect x="150" y="151" width="16" height="3" rx="1" fill="#584838"/>
+<rect x="250" y="150" width="10" height="4" rx="1" fill="#5A4A38"/>
+</g>
+
+<!-- ===== VERTICAL IRON BAND ===== -->
+<path d="M180,22 L180,400" stroke="url(#sBand)" stroke-width="14" stroke-linecap="round" clip-path="url(#shieldClip)"/>
+<path d="M180,22 L180,400" stroke="#5A4A3A" stroke-width="0.6" opacity="0.2" clip-path="url(#shieldClip)"/>
+<g clip-path="url(#shieldClip)" opacity="0.15">
+<rect x="175" y="70" width="4" height="10" rx="1" fill="#5A4A38"/>
+<rect x="176" y="200" width="3" height="12" rx="1" fill="#584838"/>
+<rect x="175" y="310" width="4" height="8" rx="1" fill="#5A4A38"/>
+</g>
+
+<!-- Band intersection rivets -->
+<circle cx="180" cy="155" r="7" fill="#404040" stroke="#222" stroke-width="1.5"/>
+<circle cx="180" cy="154.5" r="3.2" fill="#555"/>
+<circle cx="179" cy="153.5" r="1.2" fill="#6A6A6A"/>
+
+<!-- ===== CENTER BOSS (brass medallion) ===== -->
+<circle cx="180" cy="200" r="45" fill="url(#sBrass)" stroke="#6A5010" stroke-width="2.5"/>
+<circle cx="180" cy="200" r="38" fill="none" stroke="#7A5C10" stroke-width="1.5"/>
+<circle cx="180" cy="200" r="32" fill="url(#sCenter)" stroke="#8B6914" stroke-width="1"/>
+
+<!-- Compass cross inside boss -->
+<g stroke="#6A5010" stroke-width="2" stroke-linecap="round">
+<line x1="180" y1="172" x2="180" y2="228"/>
+<line x1="152" y1="200" x2="208" y2="200"/>
+</g>
+<!-- Compass diamond points -->
+<polygon points="180,175 185,195 180,200 175,195" fill="url(#sBrassHL)" stroke="#6A5010" stroke-width="0.8"/>
+<polygon points="180,225 185,205 180,200 175,205" fill="#8B6914" stroke="#6A5010" stroke-width="0.8"/>
+<polygon points="155,200 175,195 180,200 175,205" fill="url(#sBrassHL)" stroke="#6A5010" stroke-width="0.8" opacity="0.8"/>
+<polygon points="205,200 185,195 180,200 185,205" fill="#8B6914" stroke="#6A5010" stroke-width="0.8"/>
+
+<!-- Center dot -->
+<circle cx="180" cy="200" r="5" fill="#C4960E" stroke="#8B6914" stroke-width="1"/>
+<circle cx="180" cy="200" r="2.5" fill="#DABB60"/>
+<circle cx="179" cy="199" r="1" fill="#F0D868" opacity="0.5"/>
+
+<!-- Boss scrollwork -->
+<g stroke="#6A5010" stroke-width="0.8" fill="none" opacity="0.3">
+<path d="M165,182 Q172,188 168,196"/>
+<path d="M195,182 Q188,188 192,196"/>
+<path d="M165,218 Q172,212 168,204"/>
+<path d="M195,218 Q188,212 192,204"/>
+</g>
+
+<!-- Boss trefoil decorations -->
+<circle cx="180" cy="160" r="4" fill="#A07010" stroke="#6A5010" stroke-width="0.8"/>
+<circle cx="180" cy="240" r="4" fill="#A07010" stroke="#6A5010" stroke-width="0.8"/>
+<circle cx="140" cy="200" r="4" fill="#A07010" stroke="#6A5010" stroke-width="0.8"/>
+<circle cx="220" cy="200" r="4" fill="#A07010" stroke="#6A5010" stroke-width="0.8"/>
+
+<!-- Boss highlight arc -->
+<path d="M160,182 Q180,170 200,182" fill="none" stroke="#DABB60" stroke-width="0.8" opacity="0.3"/>
+
+<!-- Brass corner studs -->
+<circle cx="60" cy="65" r="5" fill="#C4960E" stroke="#8B6914" stroke-width="0.8"/>
+<circle cx="59" cy="64" r="1.8" fill="#DABB60" opacity="0.5"/>
+<circle cx="300" cy="65" r="5" fill="#C4960E" stroke="#8B6914" stroke-width="0.8"/>
+<circle cx="299" cy="64" r="1.8" fill="#DABB60" opacity="0.5"/>
+<circle cx="40" cy="120" r="5" fill="#C4960E" stroke="#8B6914" stroke-width="0.8"/>
+<circle cx="39" cy="119" r="1.8" fill="#DABB60" opacity="0.5"/>
+<circle cx="320" cy="120" r="5" fill="#C4960E" stroke="#8B6914" stroke-width="0.8"/>
+<circle cx="319" cy="119" r="1.8" fill="#DABB60" opacity="0.5"/>
+
+<!-- Patina spots -->
+<g opacity="0.08" fill="#4A6A4A" clip-path="url(#shieldClip)">
+<circle cx="80" cy="90" r="4"/>
+<circle cx="270" cy="110" r="3"/>
+<circle cx="130" cy="300" r="3.5"/>
+<circle cx="230" cy="250" r="2.5"/>
+<circle cx="100" cy="200" r="3"/>
+</g>
+
+</svg>

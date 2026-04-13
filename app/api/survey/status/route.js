@@ -8,6 +8,7 @@ import {
   buildSurveySessionClearCookie,
 } from '@/lib/survey/survey-session';
 import { isMissingOtpLastSentAtColumn } from '@/lib/survey/otp-column';
+import { FUNNEL_USERS_TABLE } from '@/lib/funnel-users';
 
 export const runtime = 'nodejs';
 
@@ -49,16 +50,16 @@ export async function POST(request) {
     let otpSentKnown = true;
 
     const first = await supabase
-      .from('survey_responses')
-      .select('verified, otp_last_sent_at')
-      .eq('id', result.surveyResponseId)
+      .from(FUNNEL_USERS_TABLE)
+      .select('verified_at, otp_last_sent_at')
+      .eq('user_id', result.surveyResponseId)
       .single();
 
     if (first.error && isMissingOtpLastSentAtColumn(first.error)) {
       const legacy = await supabase
-        .from('survey_responses')
-        .select('verified')
-        .eq('id', result.surveyResponseId)
+        .from(FUNNEL_USERS_TABLE)
+        .select('verified_at')
+        .eq('user_id', result.surveyResponseId)
         .single();
       if (legacy.error || !legacy.data) {
         const res = NextResponse.json({ ok: false, verified: false, pendingVerification: false }, { status: 200 });
@@ -75,7 +76,7 @@ export async function POST(request) {
       data = first.data;
     }
 
-    const verified = data.verified === true;
+    const verified = data.verified_at != null;
     // Only treat session as "awaiting code entry" if an SMS send was recorded — avoids jumping
     // straight to the OTP UI when a cookie exists but no code was ever sent.
     const otpSent =

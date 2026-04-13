@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
+import { getPermissionKeysForRole } from "@/lib/permission-grants";
 import { ToastProvider } from "@/components/toast";
 import DashboardClient from "./dashboard-client";
 import PendingApproval from "./pending-approval";
@@ -19,9 +20,11 @@ export default async function DashboardLayout({ children }) {
     );
   }
 
+  const permissions = await getPermissionKeysForRole(user.role);
+
   return (
     <ToastProvider>
-      <DashboardClient user={user}>{children}</DashboardClient>
+      <DashboardClient user={{ ...user, permissions }}>{children}</DashboardClient>
     </ToastProvider>
   );
 }
