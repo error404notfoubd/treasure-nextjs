@@ -372,25 +372,31 @@ export default function SurveyFlowClient({
           )}
 
           <div className="field">
-            <label htmlFor="survey-full-name">Full name</label>
+            <label htmlFor="survey-full-name">
+              Full name <span aria-hidden="true">*</span>
+            </label>
             <input
               id="survey-full-name"
               type="text"
               placeholder="Your full name"
               autoComplete="name"
+              aria-required="true"
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
             />
           </div>
           <div className="field">
-            <label htmlFor="survey-phone-national">Phone number</label>
-            <div className="phone-input-wrap" role="group" aria-label="Phone number">
+            <label htmlFor="survey-phone-national">
+              Phone number <span aria-hidden="true">*</span>
+            </label>
+            <div className="phone-input-wrap" role="group" aria-label="Phone number (required)">
               <span className="phone-cc">{surveyCountryCode}</span>
               <input
                 id="survey-phone-national"
                 type="tel"
                 inputMode="numeric"
                 autoComplete="tel-national"
+                aria-required="true"
                 placeholder="555 000 0000"
                 aria-describedby="survey-phone-hint"
                 value={formatNanpNationalDisplay(formPhoneNationalDigits)}
@@ -402,9 +408,12 @@ export default function SurveyFlowClient({
             </div>
           </div>
           <div className="field">
-            <label htmlFor="survey-favorite-game">Favorite game to play</label>
+            <label htmlFor="survey-favorite-game">
+              Favorite game to play <span aria-hidden="true">*</span>
+            </label>
             <select
               id="survey-favorite-game"
+              aria-required="true"
               value={formFavoriteGame}
               onChange={(e) => {
                 const v = e.target.value;
@@ -421,7 +430,7 @@ export default function SurveyFlowClient({
               ) : (
                 <>
                   <option value="" disabled>
-                    Choose a game
+                    Choose your favorite game to play
                   </option>
                   {favoriteGames.map((g) => (
                     <option key={g.name} value={g.name}>
