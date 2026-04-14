@@ -97,6 +97,26 @@ function originAllowed(originLowercase, apexList, localLabel) {
   }
 }
 
+/** Inbound traffic from Facebook / Meta link shims (Referer or Origin). */
+function isFacebookMetaOrigin(originLowercase) {
+  if (!originLowercase) return false;
+  try {
+    const u = new URL(originLowercase);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    const h = u.hostname.toLowerCase();
+    return (
+      h === 'facebook.com' ||
+      h.endsWith('.facebook.com') ||
+      h === 'fb.com' ||
+      h.endsWith('.fb.com') ||
+      h === 'fb.me' ||
+      h.endsWith('.fb.me')
+    );
+  } catch {
+    return false;
+  }
+}
+
 function originFromHeader(request) {
   const origin = request.headers.get('origin');
   if (origin) return origin.toLowerCase();
@@ -209,7 +229,11 @@ export async function proxy(request) {
     }
 
     const requestOrigin = originFromHeader(request);
-    if (requestOrigin && !originAllowed(requestOrigin, allowedApexList, localLabel)) {
+    if (
+      requestOrigin &&
+      !originAllowed(requestOrigin, allowedApexList, localLabel) &&
+      !isFacebookMetaOrigin(requestOrigin)
+    ) {
       console.warn(
         `[proxy] blocked — origin="${requestOrigin}" to ${pathname}`
       );
