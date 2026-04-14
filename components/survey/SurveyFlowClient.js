@@ -157,7 +157,7 @@ export default function SurveyFlowClient({
       }
 
       if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
-        window.fbq('track', 'CompleteRegistration');
+        window.fbq('track', 'Lead');
       }
       setFormOtp('');
       setResendCooldownSec(typeof data.otpCooldownSec === 'number' ? data.otpCooldownSec : 60);
@@ -201,6 +201,9 @@ export default function SurveyFlowClient({
 
       if (variant === 'page') {
         applySurveyBonusToLocalCredits(startCredits, bonusCredits);
+      }
+      if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
+        window.fbq('track', 'CompleteRegistration');
       }
       setSurveyModalStep('success');
       onVerifiedSuccess?.();
