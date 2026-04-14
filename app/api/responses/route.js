@@ -66,8 +66,20 @@ export async function GET(request) {
     return NextResponse.json({ error: "Failed to load responses." }, { status: 500 });
   }
 
+  const rows = data || [];
+  const gameIds = [...new Set(rows.map((r) => r.favorite_game_id).filter((x) => typeof x === "string" && x))];
+  const favoriteGameNames = {};
+  if (gameIds.length > 0) {
+    const { data: fgRows, error: fgErr } = await db.from("favorite_games").select("id, name").in("id", gameIds);
+    if (!fgErr && Array.isArray(fgRows)) {
+      for (const g of fgRows) {
+        if (g?.id) favoriteGameNames[g.id] = g.name;
+      }
+    }
+  }
+
   return NextResponse.json({
-    data: (data || []).map(mapUserRowForDashboard),
+    data: rows.map((r) => mapUserRowForDashboard(r, favoriteGameNames)),
     total: count,
   });
 }
@@ -191,7 +203,13 @@ export async function PATCH(request) {
     actorRole: guard.user.role,
   });
 
-  return NextResponse.json({ data: mapUserRowForDashboard(data) });
+  const favMap = {};
+  if (data?.favorite_game_id) {
+    const { data: fg } = await db.from("favorite_games").select("id, name").eq("id", data.favorite_game_id).maybeSingle();
+    if (fg?.id) favMap[fg.id] = fg.name;
+  }
+
+  return NextResponse.json({ data: mapUserRowForDashboard(data, favMap) });
 }
 
 // DELETE /api/responses — { id: user_id uuid }

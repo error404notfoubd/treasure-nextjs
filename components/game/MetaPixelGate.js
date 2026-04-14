@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Script from 'next/script';
 import CookieConsent from './CookieConsent';
 
-export default function MetaPixelGate({ pixelId, cookieFullscreenDelaySec }) {
+export default function MetaPixelGate({ pixelId }) {
   const [consented, setConsented] = useState(false);
 
   const handleAccept = useCallback(() => {
@@ -21,7 +21,7 @@ export default function MetaPixelGate({ pixelId, cookieFullscreenDelaySec }) {
 
   return (
     <>
-      <CookieConsent onAccept={handleAccept} fullscreenDelaySec={cookieFullscreenDelaySec} />
+      <CookieConsent onAccept={handleAccept} />
       {consented && (
         <Script id="meta-pixel" strategy="afterInteractive">{`
           !function(f,b,e,v,n,t,s)

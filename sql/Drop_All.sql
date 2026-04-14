@@ -12,6 +12,7 @@ DROP TABLE IF EXISTS public.verification_codes CASCADE;
 DROP TABLE IF EXISTS public.role_permission_grants CASCADE;
 DROP TABLE IF EXISTS public.app_settings CASCADE;
 DROP TABLE IF EXISTS public.users CASCADE;
+DROP TABLE IF EXISTS public.favorite_games CASCADE;
 DROP TYPE IF EXISTS public.registration_step CASCADE;
 
 DROP TABLE IF EXISTS public.rate_limit_log CASCADE;

@@ -5,7 +5,6 @@ import Link from 'next/link';
 
 const CONSENT_KEY = 'cookie_consent';
 const CONSENT_ACCEPTED_EVENT = 'cookie-consent-accepted';
-const DEFAULT_FULLSCREEN_DELAY_SEC = 8;
 
 export function getConsentValue() {
   if (typeof window === 'undefined') return null;
@@ -19,15 +18,14 @@ export function forceAcceptConsent() {
   window.dispatchEvent(new Event(CONSENT_ACCEPTED_EVENT));
 }
 
-export default function CookieConsent({ onAccept, fullscreenDelaySec }) {
+export default function CookieConsent({ onAccept }) {
   const [visible, setVisible] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     const stored = getConsentValue();
     if (stored === 'accepted') {
       onAccept?.();
-    } else if (!stored) {
+    } else {
       setVisible(true);
     }
 
@@ -39,91 +37,83 @@ export default function CookieConsent({ onAccept, fullscreenDelaySec }) {
     return () => window.removeEventListener(CONSENT_ACCEPTED_EVENT, onForceAccept);
   }, [onAccept]);
 
-  useEffect(() => {
-    if (!visible) return;
-    const delaySec = fullscreenDelaySec ?? DEFAULT_FULLSCREEN_DELAY_SEC;
-    const t = setTimeout(() => setFullscreen(true), delaySec * 1000);
-    return () => clearTimeout(t);
-  }, [visible]);
-
-  const accept = useCallback(() => {
+  const dismiss = useCallback(() => {
     localStorage.setItem(CONSENT_KEY, 'accepted');
     setVisible(false);
     onAccept?.();
   }, [onAccept]);
 
-  const decline = useCallback(() => {
-    localStorage.setItem(CONSENT_KEY, 'declined');
-    setVisible(false);
-  }, []);
-
   if (!visible) return null;
 
   return (
-    <div style={{
-      position: 'fixed', zIndex: 9999,
-      inset: fullscreen ? 0 : 'auto 0 0 0',
-      background: fullscreen
-        ? 'rgba(6,4,2,0.96)'
-        : 'linear-gradient(180deg, rgba(6,4,2,0.92) 0%, rgba(6,4,2,0.98) 100%)',
-      borderTop: fullscreen ? 'none' : '1px solid rgba(245,200,66,0.25)',
-      backdropFilter: 'blur(12px)',
-      padding: fullscreen ? '0 20px' : '16px 20px',
-      fontFamily: "'Cinzel', serif",
-      display: fullscreen ? 'flex' : 'block',
-      alignItems: 'center',
-      justifyContent: 'center',
-      transition: 'all 0.6s ease',
-    }}>
-      <div style={{
-        maxWidth: 720, margin: '0 auto',
-        display: 'flex', flexDirection: 'column', gap: fullscreen ? 20 : 12,
-        textAlign: fullscreen ? 'center' : 'left',
-      }}>
-        {fullscreen && (
-          <p style={{
-            color: '#f5c842', fontSize: 20, fontWeight: 700,
-            margin: '0 0 4px 0', letterSpacing: '0.04em',
-          }}>
-            Before You Continue
-          </p>
-        )}
-        <p style={{
-          color: '#e8dcc8',
-          fontSize: fullscreen ? 15 : 13,
-          lineHeight: 1.6, margin: 0,
-        }}>
-          We use essential cookies to run the site and, with your consent, advertising cookies
-          (Meta Pixel) to measure ad performance.
-          See our <Link href="/privacy" style={{ color: '#f5c842', textDecoration: 'underline' }}>Privacy Policy</Link> for
-          details.
+    <div
+      role="region"
+      aria-label="Cookie notice"
+      style={{
+        position: 'fixed',
+        zIndex: 9999,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'linear-gradient(180deg, rgba(6,4,2,0.92) 0%, rgba(6,4,2,0.98) 100%)',
+        borderTop: '1px solid rgba(245,200,66,0.25)',
+        backdropFilter: 'blur(12px)',
+        padding: '12px 16px 14px',
+        fontFamily: "'Cinzel', serif",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 900,
+          margin: '0 auto',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 16,
+        }}
+      >
+        <p
+          style={{
+            flex: 1,
+            color: '#e8dcc8',
+            fontSize: 13,
+            lineHeight: 1.55,
+            margin: 0,
+            minWidth: 0,
+          }}
+        >
+          We use cookies to run the site and, where applicable, advertising cookies (Meta Pixel) to
+          measure ad performance. See our{' '}
+          <Link href="/privacy" style={{ color: '#f5c842', textDecoration: 'underline' }}>
+            Privacy Policy
+          </Link>{' '}
+          for details.
         </p>
-        <div style={{
-          display: 'flex', gap: 12, flexWrap: 'wrap',
-          justifyContent: fullscreen ? 'center' : 'flex-start',
-        }}>
-          <button onClick={accept} style={{
-            background: 'linear-gradient(180deg, #f5c842 0%, #c8920a 100%)',
-            color: '#1a1408', border: 'none', borderRadius: 6,
-            padding: fullscreen ? '12px 32px' : '8px 22px',
-            fontSize: fullscreen ? 15 : 13,
-            fontWeight: 700,
-            fontFamily: "'Cinzel', serif", cursor: 'pointer',
-            letterSpacing: '0.02em',
-          }}>
-            Accept All
-          </button>
-          <button onClick={decline} style={{
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label="Close cookie notice"
+          style={{
+            flexShrink: 0,
+            width: 36,
+            height: 36,
+            marginTop: -4,
+            marginRight: -4,
+            border: '1px solid rgba(245,200,66,0.35)',
+            borderRadius: 6,
             background: 'transparent',
-            color: '#a89878', border: '1px solid rgba(245,200,66,0.3)', borderRadius: 6,
-            padding: fullscreen ? '12px 32px' : '8px 22px',
-            fontSize: fullscreen ? 15 : 13,
-            fontWeight: 600,
-            fontFamily: "'Cinzel', serif", cursor: 'pointer',
-          }}>
-            Essential Only
-          </button>
-        </div>
+            color: '#e8dcc8',
+            fontSize: 22,
+            lineHeight: 1,
+            fontFamily: 'system-ui, sans-serif',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+          }}
+        >
+          ×
+        </button>
       </div>
     </div>
   );

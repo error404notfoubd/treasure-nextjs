@@ -11,6 +11,7 @@ import {
   IconLogout,
   IconClock,
   IconShieldCheck,
+  IconGamepad,
 } from "@/components/icons";
 import { apiFetch } from "@/lib/dashboard/api-client";
 import { ROLES } from "@/lib/roles";
@@ -18,6 +19,7 @@ import { useDashboardSidebar } from "@/components/dashboard/layout-context";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Leads", icon: IconUsers, permission: "view_leads" },
+  { href: "/dashboard/games", label: "Games list", icon: IconGamepad, permission: "manage_games_list" },
   { href: "/dashboard/requests", label: "Requests", icon: IconClock, permission: "approve_signups" },
   { href: "/dashboard/audit", label: "Audit Log", icon: IconActivity, permission: "view_audit" },
   { href: "/dashboard/users", label: "User Management", icon: IconShield, permission: "manage_dashboard_users" },

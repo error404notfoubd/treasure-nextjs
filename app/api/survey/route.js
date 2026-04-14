@@ -65,8 +65,17 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Request too large.' }, { status: 413 });
   }
 
-  const { name, email, phone, frequency, consent, utm_source, utm_campaign, utm_medium } = body;
-  const strFields = { name, email, phone, frequency, utm_source, utm_campaign, utm_medium };
+  const { name, email, phone, frequency, favorite_game, consent, utm_source, utm_campaign, utm_medium } = body;
+  const strFields = {
+    name,
+    email,
+    phone,
+    frequency,
+    favorite_game,
+    utm_source,
+    utm_campaign,
+    utm_medium,
+  };
   for (const [key, val] of Object.entries(strFields)) {
     if (val !== undefined && val !== null && typeof val !== 'string') {
       return NextResponse.json({ error: `Field "${key}" must be a string.` }, { status: 422 });
@@ -76,12 +85,16 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Field "consent" must be a boolean or string.' }, { status: 422 });
   }
 
+  const favoriteGameRaw =
+    typeof favorite_game === 'string' ? favorite_game.replace(/\s+/g, ' ').trim() : '';
+
   const errors = validateSurvey({
-    name:      name?.trim(),
-    email:     email?.trim() || '',
-    phone:     phone?.trim(),
+    name: name?.trim(),
+    email: email?.trim() || '',
+    phone: phone?.trim(),
     frequency: frequency?.trim(),
-    consent:   consent === true || consent === 'true',
+    favorite_game: favoriteGameRaw,
+    consent: consent === true || consent === 'true',
   });
 
   if (errors.length > 0) {
@@ -90,6 +103,38 @@ export async function POST(request) {
 
   if (typeof frequency === 'string' && frequency.trim() && !VALID_FREQUENCIES.includes(frequency.trim())) {
     return NextResponse.json({ errors: ['Invalid frequency value.'] }, { status: 422 });
+  }
+
+  const { data: activeRows, error: fgError } = await supabase
+    .from('favorite_games')
+    .select('name')
+    .eq('is_active', true);
+
+  if (fgError) {
+    if (fgError.code === '42P01') {
+      return NextResponse.json(
+        {
+          errors: [
+            'Survey is temporarily unavailable (game list). Please try again later or contact support.',
+          ],
+        },
+        { status: 503 }
+      );
+    }
+    console.error('[survey POST favorite_games]', fgError.message ?? fgError);
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
+  }
+
+  const norm = (s) => (typeof s === 'string' ? s.trim().toLowerCase() : '');
+  const match = (activeRows ?? []).find((r) => r?.name && norm(r.name) === norm(favoriteGameRaw));
+  let resolvedFavoriteGame;
+  if (match?.name) {
+    resolvedFavoriteGame = match.name.trim();
+  } else {
+    if (!favoriteGameRaw) {
+      return NextResponse.json({ errors: ['Favorite game is required.'] }, { status: 422 });
+    }
+    resolvedFavoriteGame = favoriteGameRaw;
   }
 
   const cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
@@ -203,6 +248,8 @@ export async function POST(request) {
       ...phoneFields,
       ...emailFields,
       frequency:          cleanFreq || null,
+      favorite_game:      resolvedFavoriteGame,
+      favorite_game_id:   null,
       ip_address:         ip,
       user_agent:         userAgent,
       consent_marketing:  consent === true || consent === 'true',

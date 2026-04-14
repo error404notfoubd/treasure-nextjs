@@ -120,7 +120,7 @@ export default function ResponsesPage() {
   };
 
   const totalPages = Math.ceil(total / perPage);
-  const tableColCount = 7 + (canEdit || canDelete || canVerify ? 1 : 0);
+  const tableColCount = 8 + (canEdit || canDelete || canVerify ? 1 : 0);
 
   return (
     <>
@@ -200,6 +200,7 @@ export default function ResponsesPage() {
                   <th>Phone</th>
                   <th>Email</th>
                   <th>Verified</th>
+                  <th>Favorite game</th>
                   <th>Frequency</th>
                   <th>Status</th>
                   <th>Submitted</th>
@@ -227,6 +228,13 @@ export default function ResponsesPage() {
                         >
                           {row.verified ? "✓ Verified" : "Unverified"}
                         </span>
+                      </td>
+                      <td className="text-ink-2 text-sm max-w-[140px]">
+                        {row.favorite_game_name ? (
+                          <span className="badge bg-surface-3 text-ink-1">{row.favorite_game_name}</span>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td>
                         {row.frequency ? (

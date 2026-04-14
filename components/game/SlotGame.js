@@ -1,27 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { validateSurvey, VALID_FREQUENCIES } from '@/lib/survey/validation';
-import { toE164 } from '@/lib/phoneE164';
 import { forceAcceptConsent } from '@/components/game/CookieConsent';
-
-/** Display grouping for NANP national digits (after fixed +1). */
-function formatNanpNationalDisplay(digits) {
-  const d = String(digits).replace(/\D/g, '').slice(0, 10);
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return `${d.slice(0, 3)} ${d.slice(3)}`;
-  return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
-}
-
-/** Build full number for validation/API: E.164 country code + national digits. */
-function composeSurveyPhoneE164(countryCode, nationalDigits) {
-  const nd = String(nationalDigits).replace(/\D/g, '');
-  let cc = String(countryCode || '+1').trim();
-  if (!cc.startsWith('+')) cc = `+${cc.replace(/\D/g, '')}`;
-  else cc = `+${cc.slice(1).replace(/\D/g, '')}`;
-  return `${cc}${nd}`;
-}
 
 // ══════════════════════════════════════════════
 //  CANVAS HELPERS
@@ -113,10 +94,14 @@ export default function SlotGame({ config }) {
     SEARCH_COST_PRESETS,
     CHEST_PULSE_MS: chestPulseMs,
     SLOT_UI,
-    SURVEY_DEFAULT_COUNTRY_CODE: surveyCountryCode = '+1',
   } = config;
 
   const { HYDRATION_DELAY_MS } = SLOT_UI;
+
+  const costPresets = useMemo(() => {
+    const p = SEARCH_COST_PRESETS;
+    return Array.isArray(p) && p.length > 0 ? p : [1, 5, 10, 15, 25, 50];
+  }, [SEARCH_COST_PRESETS]);
 
   // Relic depth: higher → rarer reel (1/w probability) and higher treasure-find multiplier.
   SYMS.forEach(s => { s.w = relicDepth[s.id] ?? s.w; });
@@ -155,23 +140,7 @@ export default function SlotGame({ config }) {
   const [msgType, setMsgType]   = useState('idle');
   const [isMega, setIsMega]     = useState(false);
   const [surveyDone, setSurveyDone] = useState(false);
-  const [modalOpen, setModalOpen]   = useState(false);
   const [rulesOpen, setRulesOpen]   = useState(false);
-
-  // Survey form state
-  const [formName, setFormName]       = useState('');
-  const [formEmail, setFormEmail]     = useState('');
-  /** National digits only (fixed country code shown separately in the UI). */
-  const [formPhoneNationalDigits, setFormPhoneNationalDigits] = useState('');
-  const [formFreq, setFormFreq]       = useState('');
-  const [formConsent, setFormConsent] = useState(true);
-  const [formErrors, setFormErrors]   = useState([]);
-  const [submitting, setSubmitting]   = useState(false);
-  const [surveyModalStep, setSurveyModalStep] = useState('form');
-  const [formOtp, setFormOtp]       = useState('');
-  const [verifying, setVerifying]     = useState(false);
-  const [resending, setResending]   = useState(false);
-  const [resendCooldownSec, setResendCooldownSec] = useState(0);
 
   // Canvas refs
   const bgCanvasRef      = useRef(null);
@@ -199,7 +168,6 @@ export default function SlotGame({ config }) {
       .then(data => {
         if (data.ok && data.verified) {
           setSurveyDone(true);
-          setSurveyModalStep('success');
         } else {
           setSurveyDone(false);
         }
@@ -214,12 +182,6 @@ export default function SlotGame({ config }) {
     return () => clearTimeout(t);
   }, []);
 
-  useEffect(() => {
-    if (resendCooldownSec <= 0) return undefined;
-    const timer = setTimeout(() => setResendCooldownSec(c => c - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [resendCooldownSec]);
-
   // Persist credits on every change (only after hydration so we don't
   // overwrite the saved value with the default before it's been read)
   useEffect(() => {
@@ -227,6 +189,10 @@ export default function SlotGame({ config }) {
     if (hydrated) localStorage.setItem('th_credits', credits);
   }, [credits, hydrated]);
   useEffect(() => { betRef.current = bet; }, [bet]);
+
+  useEffect(() => {
+    if (!costPresets.includes(bet)) setBetVal(costPresets[0]);
+  }, [costPresets, bet]);
 
   useEffect(() => {
     if (!rulesOpen) return undefined;
@@ -718,134 +684,6 @@ export default function SlotGame({ config }) {
 
   function setBet(v) { setBetVal(v); }
 
-  async function openClaimModal() {
-    forceAcceptConsent();
-    try {
-      const r = await fetch('/api/survey/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-        credentials: 'include',
-      });
-      const data = await r.json();
-      if (data.ok && data.verified) {
-        setSurveyDone(true);
-        setSurveyModalStep('success');
-      } else {
-        setSurveyModalStep('form');
-      }
-    } catch {
-      setSurveyModalStep('form');
-    }
-    setFormErrors([]);
-    setModalOpen(true);
-  }
-
-  // ── Survey submit ──
-  async function handleSubmit() {
-    const fullPhone = composeSurveyPhoneE164(surveyCountryCode, formPhoneNationalDigits);
-    const errors = validateSurvey({ name:formName, email:formEmail, phone:fullPhone, frequency:formFreq, consent:formConsent });
-    if (errors.length > 0) { setFormErrors(errors); return; }
-    if (!toE164(fullPhone)) {
-      setFormErrors(['Please enter a valid mobile number (10 digits after the country code).']);
-      return;
-    }
-    setFormErrors([]); setSubmitting(true);
-    try {
-      const res = await fetch('/api/survey', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name:formName, email:formEmail, phone:fullPhone, frequency:formFreq, consent:String(formConsent) }),
-        credentials: 'include',
-      });
-      const data = await res.json();
-      if (res.status === 422) { setFormErrors(Array.isArray(data.errors) ? data.errors : [data.error || 'Please check your input.']); return; }
-      if (res.status === 409) { setFormErrors([data.error]); return; }
-      if (res.status === 429) { setFormErrors([data.error]); return; }
-      if (!res.ok) { setFormErrors([data.error || 'Something went wrong. Please try again.']); return; }
-
-      if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
-        window.fbq('track', 'CompleteRegistration');
-      }
-      setFormOtp('');
-      setResendCooldownSec(typeof data.otpCooldownSec === 'number' ? data.otpCooldownSec : 60);
-      setSurveyModalStep('otp');
-    } catch {
-      setFormErrors(['Connection error. Please check your internet and try again.']);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleVerifyOtp() {
-    const code = formOtp.trim().replace(/\s/g, '');
-    if (!/^\d{4,8}$/.test(code)) {
-      setFormErrors(['Enter the verification code from your SMS (4–8 digits).']);
-      return;
-    }
-    setFormErrors([]);
-    setVerifying(true);
-    try {
-      const res = await fetch('/api/survey/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-        credentials: 'include',
-      });
-      const data = await res.json();
-      if (res.status === 401) {
-        setFormErrors([data.error || 'Session expired. Please submit the survey again.']);
-        setSurveyModalStep('form');
-        return;
-      }
-      if (res.status === 429) { setFormErrors([data.error]); return; }
-      if (!res.ok) { setFormErrors([data.error || 'Verification failed.']); return; }
-
-      setSurveyModalStep('success');
-      setSurveyDone(true);
-      setCredits(c => c + bonusCredits);
-      launchConfetti(80);
-    } catch {
-      setFormErrors(['Connection error. Please try again.']);
-    } finally {
-      setVerifying(false);
-    }
-  }
-
-  async function handleResendCode() {
-    if (resendCooldownSec > 0 || resending || verifying) return;
-    setFormErrors([]);
-    setResending(true);
-    try {
-      const res = await fetch('/api/survey/resend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-        credentials: 'include',
-      });
-      const data = await res.json();
-      if (res.status === 429 && data.retryAfterSec != null) {
-        setResendCooldownSec(Number(data.retryAfterSec));
-        setFormErrors([data.error || 'Please wait before resending.']);
-        return;
-      }
-      if (!res.ok) {
-        if (res.status === 401) {
-          setFormErrors([data.error || 'Session expired. Please register again.']);
-          setSurveyModalStep('form');
-          return;
-        }
-        setFormErrors([data.error || 'Could not resend code.']);
-        return;
-      }
-      if (typeof data.cooldownSec === 'number') setResendCooldownSec(data.cooldownSec);
-    } catch {
-      setFormErrors(['Connection error. Please try again.']);
-    } finally {
-      setResending(false);
-    }
-  }
-
   // ══════════════════════════════════════════════
   //  RENDER
   // ══════════════════════════════════════════════
@@ -909,20 +747,28 @@ export default function SlotGame({ config }) {
 
         <div className="controls">
           <div className="stone-panel search-cost-panel">
-            <label className="cost-label search-cost-label" htmlFor="search-cost-select">Coins per search</label>
-            <select
-              id="search-cost-select"
-              className="search-cost-select"
-              value={bet}
-              onChange={(e) => setBet(Number(e.target.value))}
+            <div className="cost-label search-cost-label" id="search-cost-label">
+              Coins per search
+            </div>
+            <div
+              className="bet-presets"
+              role="radiogroup"
+              aria-labelledby="search-cost-label"
               aria-label="Coins spent each time you explore"
             >
-              {(SEARCH_COST_PRESETS ?? [1, 5, 10, 15, 25, 50]).map((v) => (
-                <option key={v} value={v}>
-                  {v} {v === 1 ? 'coin' : 'coins'} per search
-                </option>
+              {costPresets.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={bet === v}
+                  className={`bp${bet === v ? ' act' : ''}`}
+                  onClick={() => setBet(v)}
+                >
+                  {v}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
           <div className="search-action-wrap">
@@ -954,9 +800,18 @@ export default function SlotGame({ config }) {
           <div className={`survey-banner${credits <= 0 ? ' highlight' : ''}`}>
             <div className="sb-text">
               <div className="sb-title">{credits <= 0 ? 'Out of coins? Unlock more' : 'Unlock bonus coins'}</div>
-              <div className="sb-sub">Take a quick survey and <strong>unlock {bonusCredits} bonus coins</strong> for your quest</div>
+              <div className="sb-sub">
+                Take a quick survey and <strong>unlock {bonusCredits} bonus coins</strong> for your quest.
+              </div>
             </div>
-            <button className="signup-btn" onClick={openClaimModal}>Get coins</button>
+            <Link
+              href="/survey"
+              prefetch
+              className="signup-btn"
+              onClick={() => forceAcceptConsent()}
+            >
+              Get coins
+            </Link>
           </div>
         )}
 
@@ -1072,148 +927,6 @@ export default function SlotGame({ config }) {
         </div>
       </div>
 
-      {/* SURVEY MODAL */}
-      <div className={`modal-overlay${modalOpen?' open':''}`}>
-        <div className="modal">
-          {surveyModalStep === 'success' ? (
-            <div className="success-state show">
-              <div className="success-title">Thank You!</div>
-              <div className="modal-divider">Verified</div>
-              <div className="success-sub">
-                Your number is verified and your response is saved.<br/>
-                Thank you.
-              </div>
-              <div className="success-sub" style={{ marginTop: '12px' }}>Coins added to your chest:</div>
-              <div className="bonus-pill">+{bonusCredits} coins</div>
-              <div className="success-sub" style={{fontSize:'10px',color:'#6a5020'}}>Coin credits have no cash value and are for game use only.</div>
-              <button className="submit-btn" style={{marginTop:'16px'}} onClick={()=>setModalOpen(false)}>Continue Quest</button>
-            </div>
-          ) : surveyModalStep === 'otp' ? (
-            <div className="form-state" id="otp-state">
-              <div className="modal-title">Check your phone</div>
-              <div className="modal-divider">Enter verification code</div>
-              <div className="modal-sub">
-                We sent a code to the number you provided.<br/>
-                Enter it below to verify and add coins to your game.
-              </div>
-              {formErrors.length > 0 && (
-                <div className="error-box">
-                  {formErrors.map((e,i) => <div key={i}>{e}</div>)}
-                </div>
-              )}
-              <div className="field">
-                <label>Verification code</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="123456"
-                  value={formOtp}
-                  onChange={e => setFormOtp(e.target.value.replace(/[^\d\s]/g, ''))}
-                />
-              </div>
-              <button className="submit-btn" disabled={verifying} onClick={handleVerifyOtp}>
-                {verifying ? 'Verifying...' : 'Verify & unlock coins'}
-              </button>
-              <button
-                type="button"
-                className="submit-btn"
-                style={{ marginTop: '10px', opacity: 0.85 }}
-                disabled={verifying || resending || resendCooldownSec > 0}
-                onClick={handleResendCode}
-              >
-                {resending
-                  ? 'Sending...'
-                  : resendCooldownSec > 0
-                    ? `Resend code (${resendCooldownSec}s)`
-                    : 'Resend code'}
-              </button>
-              <button
-                type="button"
-                className="submit-btn"
-                style={{ marginTop: '10px', opacity: 0.85 }}
-                disabled={verifying || resending}
-                onClick={() => {
-                  setSurveyModalStep('form');
-                  setFormOtp('');
-                  setFormErrors([]);
-                }}
-              >
-                Back
-              </button>
-            </div>
-          ) : (
-            <div className="form-state" id="form-state">
-              <div className="modal-title">Unlock bonus coins</div>
-              <div className="modal-divider">Gaming Survey</div>
-              <div className="modal-sub">Complete this survey and we will add<br/><strong>{bonusCredits} bonus coins</strong> to your chest</div>
-              <div className="survey-note" style={{display:'none'}}>
-                <strong>About this survey</strong>
-                This survey collects your name, email, and phone number so we can verify your response and contact you
-                about your submission if needed.
-                <strong style={{color:'#d4a840'}}> This survey is not anonymous.</strong> Your contact details may be
-                used for messages related to this survey or your account. Participation is completely voluntary and you
-                may withdraw at any time. We will never sell your data to third parties.
-              </div>
-
-              {formErrors.length > 0 && (
-                <div className="error-box">
-                  {formErrors.map((e,i) => <div key={i}>{e}</div>)}
-                </div>
-              )}
-
-              <div className="field">
-                <label>Full name</label>
-                <input type="text" placeholder="Your full name" autoComplete="name"
-                  value={formName} onChange={e=>setFormName(e.target.value)}/>
-              </div>
-              <div className="field">
-                <label htmlFor="survey-phone-national">Phone number</label>
-                <div className="phone-input-wrap" role="group" aria-label="Phone number">
-                  <span className="phone-cc">{surveyCountryCode}</span>
-                  <input
-                    id="survey-phone-national"
-                    type="tel"
-                    inputMode="numeric"
-                    autoComplete="tel-national"
-                    placeholder="555 000 0000"
-                    aria-describedby="survey-phone-hint"
-                    value={formatNanpNationalDisplay(formPhoneNationalDigits)}
-                    onChange={(e) => {
-                      const d = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      setFormPhoneNationalDigits(d);
-                    }}
-                  />
-                </div>          
-              </div>
-              <div className="field">
-                <label>Email address (optional)</label>
-                <input type="email" placeholder="you@example.com" autoComplete="email"
-                  value={formEmail} onChange={e=>setFormEmail(e.target.value)}/>
-              </div>
-              <div className="field">
-                <label>How often do you play online games? (optional)</label>
-                <select value={formFreq} onChange={e=>setFormFreq(e.target.value)}>
-                  <option value="">— select —</option>
-                  {VALID_FREQUENCIES.map(f => <option key={f}>{f}</option>)}
-                </select>
-              </div>
-              <div className="consent-row">
-                <input type="checkbox" id="f-consent" checked={formConsent} onChange={e=>setFormConsent(e.target.checked)}/>
-                <label htmlFor="f-consent">
-                  By submitting this form I agree to the{' '}
-                  <Link href="/privacy">Privacy Policy</Link>
-                  {' '}and{' '}
-                  <Link href="/terms">Terms and Conditions</Link>.
-                </label>
-              </div>
-              <button className="submit-btn" disabled={submitting} onClick={handleSubmit}>
-                {submitting ? 'Submitting...' : 'Submit survey'}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
     </>
   );
 }
