@@ -711,12 +711,24 @@ export default function SlotGame({ config }) {
       <div className="wrap">
 
 
-        <div className="cbar">
-          <canvas className="ccoin-wrap" id="coin-anim" width="28" height="28"/>
-          <div>
-            <div className="clabel">Coins</div>
-            <div className="cval">{hydrated ? credits : '...'}</div>
+        <div className="cbar-stack">
+          <div className="cbar">
+            <canvas className="ccoin-wrap" id="coin-anim" width="28" height="28"/>
+            <div>
+              <div className="clabel">Coins</div>
+              <div className="cval">{hydrated ? credits : '...'}</div>
+            </div>
           </div>
+          <nav className="game-auth-text" aria-label="Survey registration">
+            <Link
+              href="/survey"
+              prefetch
+              className="game-auth-link game-auth-link--register"
+              onClick={() => forceAcceptConsent()}
+            >
+              Register
+            </Link>
+          </nav>
         </div>
 
         <div className="hero">

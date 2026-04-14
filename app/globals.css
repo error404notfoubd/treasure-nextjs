@@ -72,12 +72,18 @@ body{
   padding-right:var(--safe-right);
 }
 
-/* ══ CREDITS PILL ══ */
-.cbar{
+/* ══ CREDITS PILL + TEXT AUTH (Register / Login → /survey) ══ */
+.cbar-stack{
   position:absolute;
   top:max(10px,var(--safe-top));
   right:max(12px,var(--safe-right));
   z-index:30;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:5px;
+}
+.cbar{
   display:flex;align-items:center;gap:6px;
   background:linear-gradient(145deg,#1e1608,#0a0804);
   border:1.5px solid var(--gold3);
@@ -86,6 +92,43 @@ body{
   box-shadow:0 0 18px rgba(200,146,10,.35),inset 0 1px 0 rgba(255,220,100,.06);
   animation:cbar-enter .6s cubic-bezier(.34,1.56,.64,1) both;
   animation-delay:.2s;
+}
+.game-auth-text{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  line-height:1.2;
+  text-shadow:0 1px 2px rgba(0,0,0,.75);
+}
+.game-auth-link{
+  color:var(--gold3);
+  text-decoration:underline;
+  text-decoration-color:rgba(200,146,10,.45);
+  text-underline-offset:3px;
+  padding:4px 2px;
+  background:none;border:none;cursor:pointer;
+  font:inherit;
+  letter-spacing:.06em;
+  -webkit-tap-highlight-color:transparent;
+}
+.game-auth-link--register{
+  font-family:var(--font-display);
+  font-size:clamp(12px,3.4vw,15px);
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  padding:6px 4px;
+}
+.game-auth-link:hover,.game-auth-link:focus-visible{
+  color:var(--gold2);
+  text-decoration-color:rgba(255,220,100,.55);
+}
+.game-auth-link:focus-visible{
+  outline:1px solid rgba(255,220,100,.5);
+  outline-offset:2px;
+  border-radius:2px;
+}
+a.game-auth-link{
+  display:inline;
 }
 @keyframes cbar-enter{
   from{opacity:0;transform:translateY(-12px) scale(.9);}

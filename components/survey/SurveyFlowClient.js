@@ -342,8 +342,10 @@ export default function SurveyFlowClient({
         </div>
       ) : (
         <div className="form-state" id="form-state">
-          <div className="modal-title">{variant === 'modal' ? 'Unlock bonus coins' : 'Gaming survey'}</div>
-          <div className="modal-divider">{variant === 'modal' ? 'Gaming Survey' : 'Favorite games'}</div>
+          <div className="modal-title">
+            {variant === 'modal' ? 'Unlock bonus coins' : `Redeem your ${bonusCredits} Coins`}
+          </div>
+          {variant === 'modal' ? <div className="modal-divider">Gaming Survey</div> : null}
           <div className="modal-sub">
             {variant === 'modal' ? (
               <>
