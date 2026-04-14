@@ -112,20 +112,35 @@ body{
   -webkit-tap-highlight-color:transparent;
 }
 .game-auth-link--register{
-  font-family:var(--font-display);
-  font-size:clamp(12px,3.4vw,15px);
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  padding:6px 4px;
+  font-family:var(--font-body);
+  font-size:clamp(10px,2.8vw,12px);
+  color:var(--gold2);
+  letter-spacing:.04em;
+  text-transform:none;
+  text-decoration:none;
+  border-bottom:1px solid rgba(255,220,80,.4);
+  padding:4px 2px 5px;
+  line-height:1.35;
+  text-shadow:0 0 10px rgba(255,220,80,.5);
 }
 .game-auth-link:hover,.game-auth-link:focus-visible{
   color:var(--gold2);
   text-decoration-color:rgba(255,220,100,.55);
 }
+.game-auth-link.game-auth-link--register:hover{
+  color:var(--gold4);
+  border-bottom-color:rgba(255,244,176,.55);
+  text-shadow:0 0 12px rgba(255,220,80,.6);
+}
 .game-auth-link:focus-visible{
   outline:1px solid rgba(255,220,100,.5);
   outline-offset:2px;
   border-radius:2px;
+}
+.game-auth-link.game-auth-link--register:focus-visible{
+  outline:2px solid rgba(245,200,66,.5);
+  outline-offset:3px;
+  border-radius:4px;
 }
 a.game-auth-link{
   display:inline;
@@ -182,6 +197,19 @@ a.game-auth-link{
 .divider-line::before,.divider-line::after{
   content:'';flex:1;height:1px;
   background:linear-gradient(90deg,transparent,var(--gold3),transparent);
+}
+.freeplay-line{
+  margin:2px var(--sp-md) 0;
+  padding:0 12px;
+  text-align:center;
+  font-family:var(--font-body);
+  font-size:clamp(9px,2.6vw,12px);
+  font-weight:600;
+  color:var(--gold2);
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  line-height:1.35;
+  text-shadow:0 0 10px rgba(255,220,80,.45);
 }
 
 /* ══ HUNT FRAME (chest grid) ══ */
@@ -484,22 +512,6 @@ a.game-auth-link{
 .sword-deco{position:absolute;top:50%;transform:translateY(-50%);pointer-events:none;}
 .sword-deco.left-s{left:-2px;}.sword-deco.right-s{right:-2px;}
 
-/* ══ STATS ══ */
-.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px var(--sp-md) 0;}
-.stat{
-  background:linear-gradient(180deg,#1c1608,#100c04);
-  border:1px solid rgba(200,146,10,.18);border-radius:8px;
-  padding:8px 4px;text-align:center;
-  animation:stat-enter .5s ease-out both;
-}
-.stat:nth-child(1){animation-delay:.3s;}
-.stat:nth-child(2){animation-delay:.4s;}
-.stat:nth-child(3){animation-delay:.5s;}
-@keyframes stat-enter{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
-.sl{font-size:7px;color:#8a6828;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;}
-.sv{font-family:var(--font-display);font-size:clamp(15px,4vw,19px);color:var(--gold);
-  text-shadow:0 0 8px rgba(245,200,66,.35);}
-
 /* ══ SURVEY BANNER ══ */
 .survey-banner{
   margin:8px var(--sp-md) 0;
@@ -573,6 +585,107 @@ a.signup-btn{
     box-shadow:0 4px 0 #0a5028,0 6px 30px rgba(40,232,122,.55),0 0 50px rgba(40,232,122,.2),inset 0 1px 0 rgba(255,255,255,.38);
     transform:translateY(-2px);
   }
+}
+
+/* ══ TREASURE HUNT — survey bonus nudge modal (after 2nd & 12th explores, unverified phone only) ══ */
+.th-survey-nudge-backdrop{
+  position:fixed;inset:0;z-index:800;
+  background:rgba(4,2,0,.82);
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;
+  padding:max(16px,var(--safe-top)) 14px max(20px,var(--safe-bottom));
+  opacity:0;pointer-events:none;transition:opacity .25s ease;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+}
+.th-survey-nudge-backdrop--open{opacity:1;pointer-events:all;}
+.th-survey-nudge-panel{
+  width:100%;max-width:380px;
+  padding:0;
+}
+.th-survey-nudge-panel-inner{
+  background:linear-gradient(135deg,#081a06,#041002);
+  border:1.5px solid rgba(40,232,122,.35);
+  border-radius:14px;
+  padding:18px 16px 16px;
+  box-shadow:0 12px 40px rgba(0,0,0,.55),0 0 28px rgba(40,232,122,.12);
+}
+.th-survey-nudge-heading{
+  margin:0 0 10px;
+  font-family:var(--font-display);
+  font-size:clamp(12px,3.4vw,15px);
+  letter-spacing:.06em;
+  color:#40e878;
+  text-shadow:0 0 12px rgba(40,232,122,.45);
+  text-align:center;
+}
+.th-survey-nudge-body{
+  margin:0 0 18px;
+  font-size:clamp(10px,2.8vw,12px);
+  color:#7ab890;
+  line-height:1.55;
+  text-align:center;
+}
+.th-survey-nudge-body strong{color:#a0dab0;font-weight:600;}
+.th-survey-nudge-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.th-survey-nudge-action{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;
+  min-height:88px;padding:12px 10px;
+  border-radius:12px;
+  cursor:pointer;
+  text-align:center;
+  text-decoration:none;
+  box-sizing:border-box;
+  transition:transform .12s,box-shadow .12s,border-color .12s;
+  -webkit-tap-highlight-color:transparent;
+}
+.th-survey-nudge-face{
+  font-size:clamp(28px,8vw,36px);
+  line-height:1;
+}
+.th-survey-nudge-action-text{
+  font-family:var(--font-body);
+  font-size:clamp(10px,2.6vw,11px);
+  font-weight:600;
+  line-height:1.25;
+  letter-spacing:.02em;
+}
+.th-survey-nudge-action--survey{
+  border:none;
+  color:#021008;
+  background:linear-gradient(180deg,#60f898 0%,#28e878 44%,#16a050 54%,#28e878 100%);
+  box-shadow:0 4px 0 #0a5028,0 6px 16px rgba(40,232,122,.3),inset 0 1px 0 rgba(255,255,255,.38);
+}
+.th-survey-nudge-action--survey .th-survey-nudge-action-text{color:#021008;}
+.th-survey-nudge-action--survey:active{transform:translateY(2px);}
+.th-survey-nudge-action--defer{
+  border:1px solid rgba(200,146,10,.35);
+  background:linear-gradient(180deg,#1c1608,#100c04);
+  color:var(--gold3);
+}
+.th-survey-nudge-action--defer .th-survey-nudge-action-text{color:var(--gold2);}
+.th-survey-nudge-action--defer:hover{
+  border-color:rgba(200,146,10,.55);
+  color:var(--gold2);
+}
+.th-survey-nudge-action--defer:focus-visible{
+  outline:2px solid rgba(245,200,66,.45);
+  outline-offset:2px;
+}
+.th-survey-nudge-action--survey:focus-visible{
+  outline:2px solid rgba(96,255,152,.65);
+  outline-offset:2px;
+}
+.th-survey-nudge-action--defer:active{transform:scale(.98);}
+
+@media(max-width:360px){
+  .th-survey-nudge-actions{grid-template-columns:1fr;}
+  .th-survey-nudge-action{min-height:72px;}
 }
 
 /* ══ RULES POPUP (treasure rules) ══ */
@@ -1101,7 +1214,6 @@ a.survey-back-text-inline:hover{color:var(--gold2);}
   .wrap{padding-left:24px;padding-right:24px;}
   .hunt-frame{margin:8px 0 0;}
   .controls{margin:10px 0 0;}
-  .stats-row{margin:10px 0 0;}
   .survey-banner{margin:10px 0 0;}
   .rules-trigger-wrap{margin:12px 0 0;}
   .bp{font-size:13px;height:38px;}
@@ -1127,7 +1239,6 @@ a.survey-back-text-inline:hover{color:var(--gold2);}
   .hero-eyebrow,.divider-line{display:none;}
   .gem-row{margin:4px 0 2px;}
   .hunt-action-btn{padding:10px;min-height:44px;}
-  .stats-row{gap:4px;}
   .wrap{max-width:680px;}
 }
 

@@ -79,6 +79,55 @@ function rulesFullRowFlavor(id, name, mult) {
   return fn ? fn(mult) : `Five ${name} symbols in a row return ${mult} times the coins you spent on that search.`;
 }
 
+/** Finished explore counts that may open the survey bonus nudge modal (each wave can be dismissed once per session). */
+const TREASURE_SURVEY_NUDGE_AFTER_EXPLORE_COUNTS = [2, 12];
+const SS_KEY_TREASURE_SURVEY_NUDGE_DISMISSED = 'th_treasure_nudge_dismissed_waves';
+
+function migrateTreasureSurveyNudgeSessionKeys() {
+  if (typeof sessionStorage === 'undefined') return;
+  try {
+    if (sessionStorage.getItem(SS_KEY_TREASURE_SURVEY_NUDGE_DISMISSED)) return;
+    const prevList = sessionStorage.getItem('th_treasure_sms_nudge_dismissed_waves');
+    if (prevList) {
+      sessionStorage.setItem(SS_KEY_TREASURE_SURVEY_NUDGE_DISMISSED, prevList);
+      sessionStorage.removeItem('th_treasure_sms_nudge_dismissed_waves');
+      return;
+    }
+    if (sessionStorage.getItem('th_treasure_sms_modal_deferred') === '1') {
+      sessionStorage.setItem(SS_KEY_TREASURE_SURVEY_NUDGE_DISMISSED, '2');
+      sessionStorage.removeItem('th_treasure_sms_modal_deferred');
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function readDismissedTreasureSurveyNudgeWaves() {
+  if (typeof sessionStorage === 'undefined') return [];
+  try {
+    migrateTreasureSurveyNudgeSessionKeys();
+    const raw = sessionStorage.getItem(SS_KEY_TREASURE_SURVEY_NUDGE_DISMISSED) || '';
+    return raw
+      .split(',')
+      .map(s => parseInt(s, 10))
+      .filter(n => TREASURE_SURVEY_NUDGE_AFTER_EXPLORE_COUNTS.includes(n));
+  } catch {
+    return [];
+  }
+}
+
+function addDismissedTreasureSurveyNudgeWave(wave) {
+  if (typeof sessionStorage === 'undefined') return;
+  try {
+    migrateTreasureSurveyNudgeSessionKeys();
+    const dismissed = new Set(readDismissedTreasureSurveyNudgeWaves());
+    dismissed.add(wave);
+    sessionStorage.setItem(SS_KEY_TREASURE_SURVEY_NUDGE_DISMISSED, [...dismissed].sort((a, b) => a - b).join(','));
+  } catch {
+    /* ignore */
+  }
+}
+
 // ══════════════════════════════════════════════
 //  MAIN COMPONENT
 // ══════════════════════════════════════════════
@@ -132,15 +181,15 @@ export default function SlotGame({ config }) {
   const [credits, setCredits]   = useState(startCredits);
   const [hydrated, setHydrated] = useState(false);
   const [bet, setBetVal]        = useState(5);
-  const [spins, setSpins]       = useState(0);
-  const [wins, setWins]         = useState(0);
-  const [bestWin, setBestWin]   = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [winMsg, setWinMsg]     = useState('Play to seek your treasure!');
   const [msgType, setMsgType]   = useState('idle');
   const [isMega, setIsMega]     = useState(false);
-  const [surveyDone, setSurveyDone] = useState(false);
+  /** True when /api/survey/status reports phone verified (verified_at set). */
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const [rulesOpen, setRulesOpen]   = useState(false);
+  const [finishedExploreTally, setFinishedExploreTally] = useState(0);
+  const [treasureSurveyNudgeOpen, setTreasureSurveyNudgeOpen] = useState(false);
 
   // Canvas refs
   const bgCanvasRef      = useRef(null);
@@ -152,8 +201,11 @@ export default function SlotGame({ config }) {
   const symsInitRef      = useRef(false);
   const creditsRef       = useRef(credits);
   const betRef           = useRef(bet);
+  const treasureSurveyNudgeOpenRef = useRef(false);
+  treasureSurveyNudgeOpenRef.current = treasureSurveyNudgeOpen;
+  const surveyNudgeWaveRef = useRef(2);
 
-  // Load credits from localStorage after hydration; survey state comes from HttpOnly cookie + server
+  // Load credits from localStorage after hydration; phone verification for survey nudge modal only
   useEffect(() => {
     const saved = localStorage.getItem('th_credits');
     if (saved !== null) setCredits(parseInt(saved));
@@ -166,11 +218,7 @@ export default function SlotGame({ config }) {
     })
       .then(r => r.json())
       .then(data => {
-        if (data.ok && data.verified) {
-          setSurveyDone(true);
-        } else {
-          setSurveyDone(false);
-        }
+        setPhoneVerified(Boolean(data.ok && data.verified));
       })
       .catch(() => {});
 
@@ -197,12 +245,37 @@ export default function SlotGame({ config }) {
   useEffect(() => {
     if (!rulesOpen) return undefined;
     const onKey = e => {
-      if (e.key === 'Escape') setRulesOpen(false);
+      if (e.key === 'Escape' && !treasureSurveyNudgeOpenRef.current) setRulesOpen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [rulesOpen]);
 
+  useEffect(() => {
+    if (!treasureSurveyNudgeOpen) return undefined;
+    const onKey = e => {
+      if (e.key === 'Escape') dismissTreasureSurveyNudge();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [treasureSurveyNudgeOpen]);
+
+  useEffect(() => {
+    if (phoneVerified) setTreasureSurveyNudgeOpen(false);
+  }, [phoneVerified]);
+
+  useEffect(() => {
+    if (phoneVerified) return;
+    if (!TREASURE_SURVEY_NUDGE_AFTER_EXPLORE_COUNTS.includes(finishedExploreTally)) return;
+    if (readDismissedTreasureSurveyNudgeWaves().includes(finishedExploreTally)) return;
+    surveyNudgeWaveRef.current = finishedExploreTally;
+    setTreasureSurveyNudgeOpen(true);
+  }, [finishedExploreTally, phoneVerified]);
+
+  function dismissTreasureSurveyNudge() {
+    addDismissedTreasureSurveyNudgeWave(surveyNudgeWaveRef.current);
+    setTreasureSurveyNudgeOpen(false);
+  }
 
   // ── Init symbols (client-only) ──
   useEffect(() => {
@@ -556,12 +629,10 @@ export default function SlotGame({ config }) {
     if (currentCredits < currentBet) { setWinMsg('NOT ENOUGH COINS FOR THIS SEARCH'); setMsgType('miss'); setIsMega(false); return; }
     setSpinning(true);
     setCredits(c => c - currentBet);
-    setSpins(s => s + 1);
     setWinMsg(randomFrom(SPIN_MSGS)); setMsgType('spin'); setIsMega(false);
     clearSparkles();
     clearPopouts();
     triggerBounce('.cval','bounce',450);
-    triggerBounce('.stat:nth-child(1) .sv','bump',400);
     const outer = document.querySelector('.hunt-frame-outer');
     if (outer) outer.classList.add('spinning');
     startSpinMessages();
@@ -593,22 +664,17 @@ export default function SlotGame({ config }) {
     else if(max===3){win=usedBet*GOOD_FIND_MULT;msg='GOOD FIND! +'+win;type='good_find';setIsMega(false);sparkleWin(result,top);popoutWinSymbols(result,top);}
     else{msg=randomFrom(MISS_MSGS);type='miss';setIsMega(false);}
     if(win>0){
-      setCredits(c=>c+win);setWins(w=>w+1);
-      setBestWin(b=>Math.max(b,win));
+      setCredits(c=>c+win);
       flashReels(result,top);
       tagCompassCelebration(result, top, max);
       triggerBounce('.chest-row','win-flash',600);
       triggerBounce('.cval','win-bounce',600);
-      setTimeout(() => {
-        triggerBounce('.stat:nth-child(1) .sv','bump',400);
-        triggerBounce('.stat:nth-child(2) .sv','bump',400);
-        triggerBounce('.stat:nth-child(3) .sv','bump',400);
-      }, 100);
     } else {
       triggerBounce('.cval','bounce',450);
     }
     setMsgType(type);
     setWinMsg(msg);
+    setFinishedExploreTally(n => n + 1);
     setSpinning(false);
   }
 
@@ -738,6 +804,10 @@ export default function SlotGame({ config }) {
           <div className="divider-line">Begin Your Quest</div>
         </div>
 
+        <p className="freeplay-line">
+          {startCredits} coins free play
+        </p>
+
         <div className="hunt-frame">
           <div className="hunt-frame-outer">
             <div className="chest-row" id="rw">
@@ -790,12 +860,6 @@ export default function SlotGame({ config }) {
           </div>
         </div>
 
-        <div className="stats-row">
-          <div className="stat"><div className="sl">Searches</div><div className="sv">{spins}</div></div>
-          <div className="stat"><div className="sl">Finds</div><div className="sv">{wins}</div></div>
-          <div className="stat"><div className="sl">Best Find</div><div className="sv">{bestWin}</div></div>
-        </div>
-
         <div className="rules-trigger-wrap">
           <button
             type="button"
@@ -808,24 +872,22 @@ export default function SlotGame({ config }) {
           </button>
         </div>
 
-        {!surveyDone && (
-          <div className={`survey-banner${credits <= 0 ? ' highlight' : ''}`}>
-            <div className="sb-text">
-              <div className="sb-title">{credits <= 0 ? 'Out of coins? Unlock more' : 'Unlock bonus coins'}</div>
-              <div className="sb-sub">
-                Take a quick survey and <strong>unlock {bonusCredits} bonus coins</strong> for your quest.
-              </div>
+        <div className={`survey-banner${credits <= 0 ? ' highlight' : ''}`}>
+          <div className="sb-text">
+            <div className="sb-title">{credits <= 0 ? 'Out of coins? Unlock more' : 'Unlock bonus coins'}</div>
+            <div className="sb-sub">
+              Take a quick survey and <strong>unlock {bonusCredits} bonus coins</strong> for your quest.
             </div>
-            <Link
-              href="/survey"
-              prefetch
-              className="signup-btn"
-              onClick={() => forceAcceptConsent()}
-            >
-              Get coins
-            </Link>
           </div>
-        )}
+          <Link
+            href="/survey"
+            prefetch
+            className="signup-btn"
+            onClick={() => forceAcceptConsent()}
+          >
+            Get coins
+          </Link>
+        </div>
 
         <div className="footer">
           Free game for entertainment only. No purchase required.<br/>
@@ -835,6 +897,60 @@ export default function SlotGame({ config }) {
       </div>
 
       <div className="clayer" ref={confettiRef}/>
+
+      {/* Survey bonus nudge modal — unverified phone only; after 2nd and 12th finished explores (banner stays always visible) */}
+      {!phoneVerified && (
+        <div
+          className={`th-survey-nudge-backdrop${treasureSurveyNudgeOpen ? ' th-survey-nudge-backdrop--open' : ''}`}
+          role="presentation"
+          onClick={dismissTreasureSurveyNudge}
+        >
+          <div
+            className="th-survey-nudge-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="th-survey-nudge-heading"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="th-survey-nudge-panel-inner">
+              <h2 id="th-survey-nudge-heading" className="th-survey-nudge-heading">
+                Unlock bonus coins
+              </h2>
+              <p className="th-survey-nudge-body">
+                Take a quick survey and <strong>unlock {bonusCredits} bonus coins</strong> for your quest.
+              </p>
+              <div className="th-survey-nudge-actions">
+                <Link
+                  href="/survey"
+                  prefetch
+                  className="th-survey-nudge-action th-survey-nudge-action--survey"
+                  onClick={() => {
+                    forceAcceptConsent();
+                    setTreasureSurveyNudgeOpen(false);
+                  }}
+                  aria-label="Get bonus now — open survey"
+                >
+                  <span className="th-survey-nudge-face" aria-hidden="true">
+                    😊
+                  </span>
+                  <span className="th-survey-nudge-action-text">Get Bonus Now</span>
+                </Link>
+                <button
+                  type="button"
+                  className="th-survey-nudge-action th-survey-nudge-action--defer"
+                  onClick={dismissTreasureSurveyNudge}
+                  aria-label="I will claim it later"
+                >
+                  <span className="th-survey-nudge-face" aria-hidden="true">
+                    😢
+                  </span>
+                  <span className="th-survey-nudge-action-text">I will claim it later</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* RULES POPUP */}
       <div
