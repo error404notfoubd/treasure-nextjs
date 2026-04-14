@@ -406,7 +406,11 @@ export default function SurveyFlowClient({
                 }}
               />
             </div>
-            <p id="survey-phone-hint" className="modal-sub" style={{ marginTop: '8px', marginBottom: 0 }}>
+            <p
+              id="survey-phone-hint"
+              className="modal-sub"
+              style={{ marginTop: '8px', marginBottom: 0, textAlign: 'left' }}
+            >
               We only use your phone number to send you verification codes for this survey.
             </p>
           </div>
