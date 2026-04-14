@@ -73,42 +73,53 @@ const SYMS = [
   { id: 'star',    w: 6 },
 ];
 
-/** Labels for Discovery Guide treasure rows (sorted by payout in buildPaytable). */
-const PAYTABLE_TREASURE_LABELS = {
-  key: 'Key × 5',
-  crystal: 'Crystal × 5',
-  map: 'Map × 5',
-  compass: 'Compass × 5',
-  shield: 'Shield × 5',
-  scroll: 'Scroll × 5',
-  star: 'Star × 5',
-};
-
 /** Per-symbol bet multipliers for a 5-match (treasure find). */
 const TREASURE_FIND_MULT = {};
+
+/** Rules popup: full-row payout flavor per symbol (mult comes from live config). */
+const RULES_FULL_ROW_FLAVOR = {
+  key: m =>
+    `One key is a whisper; five keys are a chorus. The vault tallies ${m}× the coins you spent on that search—every latch turned at once.`,
+  crystal: m =>
+    `A chandelier of matching crystals across the row is worth ${m}× your coins-per-search: the kind of dazzle that makes the whole cave lean in.`,
+  map: m =>
+    `When every crewmate's chart shows the same coastline, the island pays ${m}× the coins that search cost you. Ink agrees, and the treasure stops pretending to hide.`,
+  compass: m =>
+    `Five needles swinging to the same bearing spin ${m}× the coins you paid for that explore back into your purse—true north, paid in gold.`,
+  shield: m =>
+    `A wall of identical shields is ${m}× your search spend: less a skirmish, more a coronation with confetti you can spend.`,
+  scroll: m =>
+    `Duplicate seals on every decree mean the treasury owes you ${m}× the coins you spent that round—history pays compound interest.`,
+  star: m =>
+    `The same constellation stamped on every lid pays ${m}× the coins you spent on that search, as if the night sky co-signed the receipt.`,
+};
+function rulesFullRowFlavor(id, name, mult) {
+  const fn = RULES_FULL_ROW_FLAVOR[id];
+  return fn ? fn(mult) : `Five ${name} symbols in a row return ${mult} times the coins you spent on that search.`;
+}
 
 // ══════════════════════════════════════════════
 //  MAIN COMPONENT
 // ══════════════════════════════════════════════
 export default function SlotGame({ config }) {
   const {
-    RTP: rtp,
-    JACKPOT_RATE: jackpotRate,
-    FOUR_OF_A_KIND_RATE: fourRate,
+    EXPLORE_HIT_PCT: exploreHitPct,
+    BONUS_LINE_PCT: bonusLinePct,
+    STREAK_FOUR_PCT: streakFourPct,
     START_CREDITS: startCredits,
     BONUS_CREDITS: bonusCredits,
-    SYMBOL_WEIGHTS,
+    RELIC_DEPTH: relicDepth,
     FIND_PAYOUTS,
-    BET_PRESETS,
-    REEL_STOP_DELAYS,
+    SEARCH_COST_PRESETS,
+    CHEST_PULSE_MS: chestPulseMs,
     SLOT_UI,
     SURVEY_DEFAULT_COUNTRY_CODE: surveyCountryCode = '+1',
   } = config;
 
   const { HYDRATION_DELAY_MS } = SLOT_UI;
 
-  // Symbol tier weights: higher → rarer reel (1/w probability) and higher treasure-find multiplier.
-  SYMS.forEach(s => { s.w = SYMBOL_WEIGHTS[s.id] ?? s.w; });
+  // Relic depth: higher → rarer reel (1/w probability) and higher treasure-find multiplier.
+  SYMS.forEach(s => { s.w = relicDepth[s.id] ?? s.w; });
   const invWeights = SYMS.map(s => ({ id: s.id, inv: 1 / Math.max(s.w, 1e-9) }));
   const TOTAL_INV_REEL = invWeights.reduce((a, x) => a + x.inv, 0);
   const wMin = Math.min(...SYMS.map(s => s.w));
@@ -124,6 +135,14 @@ export default function SlotGame({ config }) {
   const GREAT_FIND_MULT = FIND_PAYOUTS?.great_find ?? 4;
   const GOOD_FIND_MULT = FIND_PAYOUTS?.good_find ?? 2;
 
+  const rulesTreasureRows = [...SYMS]
+    .map(s => ({
+      id: s.id,
+      name: SYM_ALT[s.id] ?? s.id,
+      mult: TREASURE_FIND_MULT[s.id],
+    }))
+    .sort((a, b) => b.mult - a.mult || String(a.name).localeCompare(String(b.name)));
+
   // Game state
   const [credits, setCredits]   = useState(startCredits);
   const [hydrated, setHydrated] = useState(false);
@@ -137,6 +156,7 @@ export default function SlotGame({ config }) {
   const [isMega, setIsMega]     = useState(false);
   const [surveyDone, setSurveyDone] = useState(false);
   const [modalOpen, setModalOpen]   = useState(false);
+  const [rulesOpen, setRulesOpen]   = useState(false);
 
   // Survey form state
   const [formName, setFormName]       = useState('');
@@ -144,7 +164,7 @@ export default function SlotGame({ config }) {
   /** National digits only (fixed country code shown separately in the UI). */
   const [formPhoneNationalDigits, setFormPhoneNationalDigits] = useState('');
   const [formFreq, setFormFreq]       = useState('');
-  const [formConsent, setFormConsent] = useState(false);
+  const [formConsent, setFormConsent] = useState(true);
   const [formErrors, setFormErrors]   = useState([]);
   const [submitting, setSubmitting]   = useState(false);
   const [surveyModalStep, setSurveyModalStep] = useState('form');
@@ -208,7 +228,14 @@ export default function SlotGame({ config }) {
   }, [credits, hydrated]);
   useEffect(() => { betRef.current = bet; }, [bet]);
 
-
+  useEffect(() => {
+    if (!rulesOpen) return undefined;
+    const onKey = e => {
+      if (e.key === 'Escape') setRulesOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [rulesOpen]);
 
 
   // ── Init symbols (client-only) ──
@@ -218,7 +245,6 @@ export default function SlotGame({ config }) {
     startCoinAnim('load-coin', 22);
     initChests();
     buildGemRow();
-    buildPaytable();
     animateCoin();
     initBgCanvas();
     initTorchCanvas();
@@ -301,32 +327,6 @@ export default function SlotGame({ config }) {
       requestAnimationFrame(loop);
     }
     loop();
-  }
-
-  // ── Paytable (Discovery Guide) — highest payout first ──
-  function buildPaytable() {
-    const grid = document.getElementById('ptgrid'); if (!grid) return;
-    grid.innerHTML = '';
-    const treasureRows = SYMS.map(s => ({
-      sym: s.id,
-      label: PAYTABLE_TREASURE_LABELS[s.id] || `${s.id} × 5`,
-      mult: TREASURE_FIND_MULT[s.id],
-    }));
-    const metaRows = [
-      { sym: null, label: 'Great find', mult: GREAT_FIND_MULT },
-      { sym: null, label: 'Good find', mult: GOOD_FIND_MULT },
-    ];
-    const rows = [...treasureRows, ...metaRows].sort(
-      (a, b) => b.mult - a.mult || String(a.label).localeCompare(String(b.label)),
-    );
-    rows.forEach(row => {
-      const div=document.createElement('div');div.className='pt-row';
-      const sym=document.createElement('span');sym.className='pt-sym';
-      if(row.sym&&SYM_SVG[row.sym]){const ico=document.createElement('span');ico.className='pt-ico';ico.innerHTML=SYM_SVG[row.sym];sym.appendChild(ico);}
-      const lbl=document.createElement('span');lbl.textContent=row.label;sym.appendChild(lbl);
-      const mult=document.createElement('span');mult.className='pm';mult.textContent='×'+row.mult;
-      div.appendChild(sym);div.appendChild(mult);grid.appendChild(div);
-    });
   }
 
   // ── Coin animation (shared renderer) ──
@@ -481,14 +481,14 @@ export default function SlotGame({ config }) {
   //  GAME LOGIC
   // ══════════════════════════════════════════════
   function pickResult() {
-    const isWin = Math.random() * 100 < rtp;
-    const isJP  = isWin && Math.random() * 100 < jackpotRate;
-    if (isJP) {
+    const isWin = Math.random() * 100 < exploreHitPct;
+    const isRareFindLine = isWin && Math.random() * 100 < bonusLinePct;
+    if (isRareFindLine) {
       const j = ['key', 'crystal', 'map', 'shield', 'scroll', 'star'][Math.floor(Math.random() * 6)];
       return [j, j, j, j, j];
     }
     if (isWin) {
-      const is4 = Math.random() * 100 < (fourRate ?? 15); const sym = pickRand();
+      const is4 = Math.random() * 100 < (streakFourPct ?? 15); const sym = pickRand();
       const res = [sym,sym,sym];
       for (let i=3;i<5;i++) { if (i<(is4?4:3)) res.push(sym); else { let s; do{s=pickRand();}while(s===sym); res.push(s); } }
       return res.sort(() => Math.random()-.5);
@@ -596,11 +596,11 @@ export default function SlotGame({ config }) {
     clearPopouts();
     triggerBounce('.cval','bounce',450);
     triggerBounce('.stat:nth-child(1) .sv','bump',400);
-    const outer = document.querySelector('.machine-outer');
+    const outer = document.querySelector('.hunt-frame-outer');
     if (outer) outer.classList.add('spinning');
     startSpinMessages();
     const result = pickResult(); let done = 0;
-    const durs = REEL_STOP_DELAYS ?? [860,1100,1340,1580,1820];
+    const durs = chestPulseMs ?? [860, 1100, 1340, 1580, 1820];
     for (let i=0;i<5;i++) animChest(i, result[i], durs[i], () => { done++; if(done===5) setTimeout(()=>finalizeResult(result,currentBet),80); });
   }, []);
 
@@ -615,7 +615,7 @@ export default function SlotGame({ config }) {
 
   function finalizeResult(result, usedBet) {
     stopSpinMessages();
-    const outer = document.querySelector('.machine-outer');
+    const outer = document.querySelector('.hunt-frame-outer');
     if (outer) outer.classList.remove('spinning');
 
     const cnt={}; result.forEach(s=>{cnt[s]=(cnt[s]||0)+1;});
@@ -711,7 +711,7 @@ export default function SlotGame({ config }) {
 
   function showCoinPop(amt){
     const el=document.createElement('div');el.className='coinpop';el.textContent=`+${amt}`;
-    const btn=document.getElementById('sbtn');if(!btn)return;
+    const btn=document.getElementById('hunt-action-btn');if(!btn)return;
     const r=btn.getBoundingClientRect();el.style.left=r.left+r.width/2-28+'px';el.style.top=r.top-10+'px';
     document.body.appendChild(el);setTimeout(()=>el.remove(),1000);
   }
@@ -888,8 +888,8 @@ export default function SlotGame({ config }) {
           <div className="divider-line">Begin Your Quest</div>
         </div>
 
-        <div className="machine">
-          <div className="machine-outer">
+        <div className="hunt-frame">
+          <div className="hunt-frame-outer">
             <div className="chest-row" id="rw">
               {[0,1,2,3,4].map(i => (
                 <div className="chest" id={`r${i}`} key={i}>
@@ -909,7 +909,7 @@ export default function SlotGame({ config }) {
 
         <div className="controls">
           <div className="stone-panel search-cost-panel">
-            <label className="bet-title search-cost-label" htmlFor="search-cost-select">Coins per search</label>
+            <label className="cost-label search-cost-label" htmlFor="search-cost-select">Coins per search</label>
             <select
               id="search-cost-select"
               className="search-cost-select"
@@ -917,7 +917,7 @@ export default function SlotGame({ config }) {
               onChange={(e) => setBet(Number(e.target.value))}
               aria-label="Coins spent each time you explore"
             >
-              {(BET_PRESETS ?? [1, 5, 10, 15, 25, 50]).map((v) => (
+              {(SEARCH_COST_PRESETS ?? [1, 5, 10, 15, 25, 50]).map((v) => (
                 <option key={v} value={v}>
                   {v} {v === 1 ? 'coin' : 'coins'} per search
                 </option>
@@ -925,8 +925,8 @@ export default function SlotGame({ config }) {
             </select>
           </div>
 
-          <div className="spin-wrap">
-            <button className="sbtn" id="sbtn" disabled={spinning || credits <= 0} onClick={doSpin}>
+          <div className="search-action-wrap">
+            <button className="hunt-action-btn" id="hunt-action-btn" disabled={spinning || credits <= 0} onClick={doSpin}>
               {spinning ? 'SEARCHING...' : 'EXPLORE'}
             </button>
           </div>
@@ -936,6 +936,18 @@ export default function SlotGame({ config }) {
           <div className="stat"><div className="sl">Searches</div><div className="sv">{spins}</div></div>
           <div className="stat"><div className="sl">Finds</div><div className="sv">{wins}</div></div>
           <div className="stat"><div className="sl">Best Find</div><div className="sv">{bestWin}</div></div>
+        </div>
+
+        <div className="rules-trigger-wrap">
+          <button
+            type="button"
+            className="rules-trigger-btn"
+            onClick={() => setRulesOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={rulesOpen}
+          >
+            Rules to find your treasure
+          </button>
         </div>
 
         {!surveyDone && (
@@ -948,13 +960,6 @@ export default function SlotGame({ config }) {
           </div>
         )}
 
-        <div className="paytable">
-          <div className="pt-title">Discovery Guide</div>
-          <div className="pt-grid" id="ptgrid"/>
-        </div>
-
-
-
         <div className="footer">
           Free game for entertainment only. No purchase required.<br/>
           Coin credits have no cash value. Must be 21+ to play.<br/>
@@ -963,6 +968,109 @@ export default function SlotGame({ config }) {
       </div>
 
       <div className="clayer" ref={confettiRef}/>
+
+      {/* RULES POPUP */}
+      <div
+        className={`rules-overlay${rulesOpen ? ' open' : ''}`}
+        role="presentation"
+        onClick={() => setRulesOpen(false)}
+      >
+        <div
+          className="rules-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rules-dialog-title"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="rules-dialog-head">
+            <h2 id="rules-dialog-title" className="rules-dialog-title">
+              Rules to find your treasure
+            </h2>
+            <button
+              type="button"
+              className="rules-close"
+              onClick={() => setRulesOpen(false)}
+              aria-label="Close rules"
+            >
+              ×
+            </button>
+          </div>
+          <div className="rules-prose">
+            <p className="rules-lede">
+              Press <strong>Explore</strong> and the chests spill their relics. Your <strong>Coins per search</strong>{' '}
+              sets how many coins each explore uses; dial it up or down and every reward below scales the same way, so
+              the math stays easy to follow.
+            </p>
+
+            <div className="rules-kicker">When all five chests match</div>
+            <p className="rules-section-lead">
+              The chests read left to right. When every lid shows the same relic, you have a full-row strike—the ledger
+              rewards the rarest agreements first and still tips its hat to the humbler patterns at the bottom of the
+              chart.
+            </p>
+            {rulesTreasureRows.map((row, i) => (
+              <div key={row.id} className="rules-treasure-card">
+                <div
+                  className="rules-treasure-ico-wrap"
+                  aria-hidden="true"
+                  dangerouslySetInnerHTML={{ __html: SYM_SVG[row.id] || '' }}
+                />
+                <div className="rules-treasure-body">
+                  {i === 0 && <span className="rules-treasure-tier">Richest full row</span>}
+                  <div className="rules-treasure-titleline">
+                    <span className="rules-treasure-name">{row.name}</span>
+                    <span className="rules-treasure-sep" aria-hidden="true">
+                      ·
+                    </span>
+                    <span className="rules-treasure-mult">×{row.mult}</span>
+                  </div>
+                  <p className="rules-treasure-blurb">{rulesFullRowFlavor(row.id, row.name, row.mult)}</p>
+                </div>
+              </div>
+            ))}
+
+            <div className="rules-kicker">Runs that almost go the distance</div>
+            <p className="rules-section-lead">
+              The chests read from left to right. You do not always need five copies to hear the coins clink—tight runs
+              still count.
+            </p>
+
+            <div className="rules-partial-card">
+              <div className="rules-partial-visual" aria-hidden="true">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <span key={n} className={`rules-run-dot${n <= 4 ? ' rules-run-dot--on' : ''}`} />
+                ))}
+              </div>
+              <div className="rules-partial-copy">
+                <span className="rules-partial-badge">Great find</span>
+                <p>
+                  Four matching relics in a row still sings victory. A <strong>great find</strong> pays{' '}
+                  <strong className="rules-pay-num">{GREAT_FIND_MULT}×</strong> the coins you put into that search.
+                </p>
+              </div>
+            </div>
+
+            <div className="rules-partial-card rules-partial-card--good">
+              <div className="rules-partial-visual" aria-hidden="true">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <span key={n} className={`rules-run-dot${n <= 3 ? ' rules-run-dot--on' : ''}`} />
+                ))}
+              </div>
+              <div className="rules-partial-copy">
+                <span className="rules-partial-badge rules-partial-badge--soft">Good find</span>
+                <p>
+                  Three in a row is the spark that keeps the quest alive. A <strong>good find</strong> returns{' '}
+                  <strong className="rules-pay-num">{GOOD_FIND_MULT}×</strong> the coins you spent on that search. Fewer
+                  than three matching chests in a run does not award coins—so chase the longest chain you can.
+                </p>
+              </div>
+            </div>
+          </div>
+          <button type="button" className="rules-done-btn" onClick={() => setRulesOpen(false)}>
+            Back to the hunt
+          </button>
+        </div>
+      </div>
 
       {/* SURVEY MODAL */}
       <div className={`modal-overlay${modalOpen?' open':''}`}>
@@ -977,23 +1085,6 @@ export default function SlotGame({ config }) {
               </div>
               <div className="success-sub" style={{ marginTop: '12px' }}>Coins added to your chest:</div>
               <div className="bonus-pill">+{bonusCredits} coins</div>
-              <div className="helpline-card" style={{display:'none'}}>
-                <div className="helpline-title">Support Resources</div>
-                <div className="helpline-item">
-                  <div className="helpline-name">National Problem Gambling Helpline (US)</div>
-                  <a className="helpline-num" href="tel:18005224700">1-800-522-4700</a>
-                </div>
-                <div className="helpline-item">
-                  <div className="helpline-name">GamCare Helpline (UK)</div>
-                  <a className="helpline-num" href="tel:08088020133">0808 802 0133</a>
-                </div>
-                <div className="helpline-item">
-                  <div className="helpline-name">Online resources</div>
-                  <a className="helpline-link" href="https://www.ncpgambling.org" target="_blank" rel="noreferrer">ncpgambling.org</a>
-                  &nbsp;&middot;&nbsp;
-                  <a className="helpline-link" href="https://www.gamcare.org.uk" target="_blank" rel="noreferrer">gamcare.org.uk</a>
-                </div>
-              </div>
               <div className="success-sub" style={{fontSize:'10px',color:'#6a5020'}}>Coin credits have no cash value and are for game use only.</div>
               <button className="submit-btn" style={{marginTop:'16px'}} onClick={()=>setModalOpen(false)}>Continue Quest</button>
             </div>
@@ -1058,8 +1149,11 @@ export default function SlotGame({ config }) {
               <div className="modal-sub">Complete this survey and we will add<br/><strong>{bonusCredits} bonus coins</strong> to your chest</div>
               <div className="survey-note" style={{display:'none'}}>
                 <strong>About this survey</strong>
-                This survey collects your name, email, and phone number so we can follow up with relevant gambling support resources and helpline information if appropriate.
-                <strong style={{color:'#d4a840'}}> This survey is not anonymous.</strong> Your contact details will be used to send you support information. Participation is completely voluntary and you may withdraw at any time. We will never sell your data to third parties.
+                This survey collects your name, email, and phone number so we can verify your response and contact you
+                about your submission if needed.
+                <strong style={{color:'#d4a840'}}> This survey is not anonymous.</strong> Your contact details may be
+                used for messages related to this survey or your account. Participation is completely voluntary and you
+                may withdraw at any time. We will never sell your data to third parties.
               </div>
 
               {formErrors.length > 0 && (
@@ -1107,7 +1201,10 @@ export default function SlotGame({ config }) {
               <div className="consent-row">
                 <input type="checkbox" id="f-consent" checked={formConsent} onChange={e=>setFormConsent(e.target.checked)}/>
                 <label htmlFor="f-consent">
-                  I consent to being contacted about my submission and and to the use of my survey data as described in our <Link href="/privacy">Privacy Policy</Link>.
+                  By submitting this form I agree to the{' '}
+                  <Link href="/privacy">Privacy Policy</Link>
+                  {' '}and{' '}
+                  <Link href="/terms">Terms and Conditions</Link>.
                 </label>
               </div>
               <button className="submit-btn" disabled={submitting} onClick={handleSubmit}>

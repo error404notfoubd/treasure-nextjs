@@ -8,7 +8,7 @@ export default function SystemConfigurationClient() {
       <div className="sticky top-0 z-10 border-b border-surface-3/50 bg-surface-1 px-4 py-3 sm:px-6 sm:py-4 lg:px-7">
         <h2 className="text-base font-bold tracking-tight sm:text-lg">System configuration</h2>
         <p className="text-[12px] text-ink-4 mt-1 max-w-2xl">
-          Tune the public slot game, survey limits, and dashboard sign-in rules. Changes apply after save; the public site may cache values for a short time.
+          Tune the public game experience, survey limits, and dashboard sign-in rules. Changes apply after save; the public site may cache values for a short time.
         </p>
       </div>
 

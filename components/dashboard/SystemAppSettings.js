@@ -26,7 +26,7 @@ export default function SystemAppSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [s, setS] = useState(null);
-  const [betPresetsText, setBetPresetsText] = useState("");
+  const [searchCostPresetsText, setSearchCostPresetsText] = useState("");
   const [reelDelaysText, setReelDelaysText] = useState("");
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mount load only
@@ -40,7 +40,7 @@ export default function SystemAppSettings() {
         if (!res.ok) throw new Error(json.error || "Could not load settings");
         if (!cancelled) {
           setS(json);
-          setBetPresetsText((json.betPresets || []).join(", "));
+          setSearchCostPresetsText((json.searchCostPresets || []).join(", "));
           setReelDelaysText((json.reelStopDelays || []).join(", "));
         }
       } catch (e) {
@@ -78,7 +78,7 @@ export default function SystemAppSettings() {
   const handleSave = async (e) => {
     e.preventDefault();
     if (!s) return;
-    const betPresets = betPresetsText
+    const searchCostPresets = searchCostPresetsText
       .split(/[\s,]+/)
       .map((x) => num(x, NaN))
       .filter((n) => n > 0);
@@ -88,7 +88,7 @@ export default function SystemAppSettings() {
       .filter((n) => n > 0);
     const payload = {
       ...s,
-      betPresets: betPresets.length ? betPresets : s.betPresets,
+      searchCostPresets: searchCostPresets.length ? searchCostPresets : s.searchCostPresets,
       reelStopDelays: reelStopDelays.length ? reelStopDelays : s.reelStopDelays,
       surveyControlPhoneE164: s.surveyControlPhoneE164 === "" ? null : s.surveyControlPhoneE164,
     };
@@ -102,7 +102,7 @@ export default function SystemAppSettings() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "Save failed");
       setS(json);
-      setBetPresetsText((json.betPresets || []).join(", "));
+      setSearchCostPresetsText((json.searchCostPresets || []).join(", "));
       setReelDelaysText((json.reelStopDelays || []).join(", "));
       toast("System settings saved.", "success");
     } catch (err) {
@@ -139,8 +139,8 @@ export default function SystemAppSettings() {
 
       <div className="max-h-[75vh] overflow-y-auto px-4 py-4 sm:px-5 space-y-5">
         <Section
-          title="Slot game (public)"
-          lead="Controls the marketing slot experience: starting balance, win mix, reel timing, and chip sizes. RTP and rates influence random outcomes on the client."
+          title="Public game (marketing site)"
+          lead="Controls the free-to-play experience: starting balance, outcome mix, timing, and coin search sizes. Reward and rarity rates influence random outcomes on the client."
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field
@@ -156,33 +156,33 @@ export default function SystemAppSettings() {
               onChange={(v) => setField("bonusCredits", num(v))}
             />
             <Field
-              label="RTP %"
-              description="Target return-to-player feel (0–100). Used in the client spin model alongside the rates below."
-              value={s.rtp}
-              onChange={(v) => setField("rtp", num(v))}
+              label="Reward rate %"
+              description="How often the client grants a winning outcome (0–100). Used alongside the rates below."
+              value={s.rewardRate}
+              onChange={(v) => setField("rewardRate", num(v))}
             />
             <Field
-              label="Jackpot rate %"
-              description="Weight for jackpot-style outcomes in the client RNG mix (0 disables that tier)."
-              value={s.jackpotRate}
-              onChange={(v) => setField("jackpotRate", num(v))}
+              label="Rare find line rate %"
+              description="Among wins, how often all five symbols match the same treasure (0–100). Set to 0 to disable that tier."
+              value={s.rareFindRate}
+              onChange={(v) => setField("rareFindRate", num(v))}
             />
             <Field
-              label="Four-of-a-kind rate %"
-              description="Weight for four-match outcomes relative to other non-jackpot results."
+              label="Four-match rate %"
+              description="Weight for four-symbol match outcomes relative to other non-rare-find results."
               value={s.fourOfAKindRate}
               onChange={(v) => setField("fourOfAKindRate", num(v))}
             />
           </div>
 
           <DescribedControl
-            label="Bet presets"
-            description="Comma-separated bet amounts (chips) shown in the slot UI, in the same order as entered."
+            label="Search cost presets"
+            description="Comma-separated coin amounts for each search, shown in the public UI in the same order as entered."
             input={
               <input
                 className="input font-mono text-sm"
-                value={betPresetsText}
-                onChange={(e) => setBetPresetsText(e.target.value)}
+                value={searchCostPresetsText}
+                onChange={(e) => setSearchCostPresetsText(e.target.value)}
                 spellCheck={false}
               />
             }
@@ -205,7 +205,7 @@ export default function SystemAppSettings() {
             <h5 className="text-[11px] font-semibold uppercase tracking-wide text-ink-3 mb-2">Symbol weights</h5>
             <p className="text-[11px] text-ink-4 leading-relaxed mb-3">
               Higher weight means the symbol lands less often on the reel and generally earns a higher five-of-a-kind
-              payout tier in the paytable.
+              reward tier in the player-facing treasure rules.
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {SYM_IDS.map((id) => (
@@ -222,14 +222,14 @@ export default function SystemAppSettings() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
-              label="Great find multiplier (× bet)"
-              description='Payout multiplier (times current bet) for a "great find" outcome that is not a five-symbol treasure line.'
+              label="Great find multiplier (× search cost)"
+              description='Coin multiplier (times current search cost) for a "great find" outcome that is not a five-symbol treasure line.'
               value={s.findPayouts.great_find}
               onChange={(v) => setFind("great_find", v)}
             />
             <Field
-              label="Good find multiplier (× bet)"
-              description='Payout multiplier for a "good find" outcome below the great-find tier.'
+              label="Good find multiplier (× search cost)"
+              description='Coin multiplier for a "good find" outcome below the great-find tier.'
               value={s.findPayouts.good_find}
               onChange={(v) => setFind("good_find", v)}
             />

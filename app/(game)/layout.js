@@ -4,7 +4,7 @@ import '../globals.css';
 
 export const metadata = {
   title:       'Treasure Hunt — Free to Play',
-  description: 'Spin for free in the ancient treasure hunt slot game.',
+  description: 'Explore the free treasure hunt adventure game.',
   robots:      'noindex, nofollow',
   appleWebApp: {
     capable:           'yes',

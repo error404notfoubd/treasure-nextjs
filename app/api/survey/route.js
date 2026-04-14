@@ -88,14 +88,14 @@ export async function POST(request) {
     return NextResponse.json({ errors }, { status: 422 });
   }
 
-  if (frequency && !VALID_FREQUENCIES.includes(frequency.trim())) {
+  if (typeof frequency === 'string' && frequency.trim() && !VALID_FREQUENCIES.includes(frequency.trim())) {
     return NextResponse.json({ errors: ['Invalid frequency value.'] }, { status: 422 });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanName  = name.trim();
-  const cleanPhone = phone.trim();
-  const cleanFreq  = frequency.trim();
+  const cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
+  const cleanName = (typeof name === 'string' ? name : '').trim();
+  const cleanPhone = (typeof phone === 'string' ? phone : '').trim();
+  const cleanFreq = (typeof frequency === 'string' ? frequency : '').trim();
   /** DB allows NULL or valid email only — never '' (fails email_format CHECK). */
   const emailForDb = cleanEmail.length > 0 ? cleanEmail : null;
   const userAgent  = (request.headers.get('user-agent') || '').slice(0, 300);

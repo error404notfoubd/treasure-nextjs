@@ -4,7 +4,7 @@ import TERMS_AND_CONDITIONS from '@/lib/termsAndConditions';
 
 export const metadata = {
   title:       `Terms & Conditions — ${GAME_CONFIG.SITE.NAME}`,
-  description: 'Terms and conditions for using Treasure Hunt Slots.',
+  description: `Terms and conditions for using ${GAME_CONFIG.SITE.NAME}.`,
   robots:      'noindex, follow',
 };
 
