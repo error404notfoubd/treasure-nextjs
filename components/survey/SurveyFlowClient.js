@@ -411,7 +411,7 @@ export default function SurveyFlowClient({
               className="modal-sub"
               style={{ marginTop: '8px', marginBottom: 0, textAlign: 'left' }}
             >
-              We only use your phone number to send you verification codes for this survey.
+              We only use your phone number to send you verification codes. This helps us verify that you are a human.
             </p>
           </div>
           <div className="field">
