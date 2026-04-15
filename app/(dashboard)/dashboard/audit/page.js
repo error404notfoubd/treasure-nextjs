@@ -32,13 +32,6 @@ const OP_LABELS = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function hasViewableData(log) {
-  return (
-    (log.old_data && typeof log.old_data === "object" && Object.keys(log.old_data).length > 0) ||
-    (log.new_data && typeof log.new_data === "object" && Object.keys(log.new_data).length > 0)
-  );
-}
-
 /** Hide profile / funnel UUID fields in audit diff for non–owner/admin viewers. */
 function shouldHideAuditField(key, sampleVal, showUserIds) {
   if (showUserIds) return false;
@@ -54,7 +47,10 @@ export default function AuditPage() {
   const showUserIds = canViewUserIdentifiers(actor?.role);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLog, setSelectedLog] = useState(null);
+  const [auditSummary, setAuditSummary] = useState(null);
+  const [auditDetailLog, setAuditDetailLog] = useState(null);
+  const [auditDetailLoading, setAuditDetailLoading] = useState(false);
+  const [auditDetailError, setAuditDetailError] = useState(null);
 
   const fetchAudit = useCallback(async () => {
     setLoading(true);
@@ -72,6 +68,29 @@ export default function AuditPage() {
   useEffect(() => {
     fetchAudit();
   }, [fetchAudit]);
+
+  const openAuditDetail = async (summaryRow) => {
+    setAuditSummary(summaryRow);
+    setAuditDetailLog(null);
+    setAuditDetailError(null);
+    setAuditDetailLoading(true);
+    try {
+      const res = await apiFetch(`/api/audit/${summaryRow.id}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to load");
+      setAuditDetailLog(json.data);
+    } catch (err) {
+      setAuditDetailError(err.message);
+    }
+    setAuditDetailLoading(false);
+  };
+
+  const closeAuditDetail = () => {
+    setAuditSummary(null);
+    setAuditDetailLog(null);
+    setAuditDetailError(null);
+    setAuditDetailLoading(false);
+  };
 
   return (
     <>
@@ -128,16 +147,15 @@ export default function AuditPage() {
                         )}
                       </div>
                     </div>
-                    {hasViewableData(log) && (
-                      <button
-                        className="flex-shrink-0 mt-0.5 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-ink-3 hover:text-accent hover:bg-accent-muted transition-colors"
-                        onClick={() => setSelectedLog(log)}
-                        title="View data changes"
-                      >
-                        <IconEye size={12} />
-                        <span className="hidden sm:inline">Details</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="flex-shrink-0 mt-0.5 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-ink-3 hover:text-accent hover:bg-accent-muted transition-colors"
+                      onClick={() => openAuditDetail(log)}
+                      title="View data changes"
+                    >
+                      <IconEye size={12} />
+                      <span className="hidden sm:inline">Details</span>
+                    </button>
                   </div>
                 ))}
               </div>
@@ -146,14 +164,25 @@ export default function AuditPage() {
         </div>
       </div>
 
-      {selectedLog && (
-        <DataDiffModal log={selectedLog} showUserIds={showUserIds} onClose={() => setSelectedLog(null)} />
+      {auditSummary && (
+        <DataDiffModal
+          log={auditDetailLog}
+          summary={auditSummary}
+          loading={auditDetailLoading}
+          errorMessage={auditDetailError}
+          showUserIds={showUserIds}
+          onClose={closeAuditDetail}
+        />
       )}
     </>
   );
 }
 
 function EntryDetail({ log, showUserIds }) {
+  if (log.operation === "UPDATE" && log.change_summary) {
+    return <span className="text-ink-3"> — {log.change_summary}</span>;
+  }
+
   const name =
     log.new_data?.name ||
     log.old_data?.name ||
@@ -207,7 +236,7 @@ function formatFieldName(key) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function DataDiffModal({ log, showUserIds, onClose }) {
+function DataDiffModal({ log, summary, loading, errorMessage, showUserIds, onClose }) {
   useEffect(() => {
     const handleEsc = (e) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", handleEsc);
@@ -218,8 +247,9 @@ function DataDiffModal({ log, showUserIds, onClose }) {
     };
   }, [onClose]);
 
-  const oldData = log.old_data && typeof log.old_data === "object" ? log.old_data : {};
-  const newData = log.new_data && typeof log.new_data === "object" ? log.new_data : {};
+  const meta = log || summary;
+  const oldData = log?.old_data && typeof log.old_data === "object" ? log.old_data : {};
+  const newData = log?.new_data && typeof log.new_data === "object" ? log.new_data : {};
   const allKeysRaw = [...new Set([...Object.keys(oldData), ...Object.keys(newData)])];
   const allKeys = allKeysRaw.filter(
     (key) => !shouldHideAuditField(key, oldData[key] ?? newData[key], showUserIds)
@@ -229,8 +259,8 @@ function DataDiffModal({ log, showUserIds, onClose }) {
   const hasNew = Object.keys(newData).length > 0;
   const hasBoth = hasOld && hasNew;
 
-  const opLabel = OP_LABELS[log.operation] || log.operation;
-  const opColor = OP_COLORS[log.operation] || "bg-ink-4";
+  const opLabel = OP_LABELS[meta.operation] || meta.operation;
+  const opColor = OP_COLORS[meta.operation] || "bg-ink-4";
 
   return (
     <div
@@ -246,13 +276,15 @@ function DataDiffModal({ log, showUserIds, onClose }) {
           <div className="flex items-center gap-3">
             <div className={`w-2.5 h-2.5 rounded-full ${opColor}`} />
             <div>
-              <h3 className="text-[15px] font-bold">{opLabel} — {log.table_name}</h3>
+              <h3 className="text-[15px] font-bold">{opLabel} — {meta.table_name}</h3>
               <p className="text-[11px] text-ink-4 font-mono mt-0.5">
-                {new Date(log.performed_at).toLocaleString()}
-                {log.performed_by && log.performed_by !== "system" && (
-                  <> &middot; {log.performed_by}</>
+                {new Date(meta.performed_at).toLocaleString()}
+                {meta.performed_by &&
+                  meta.performed_by !== "system" &&
+                  meta.performed_by !== "service_role" && (
+                  <> &middot; {meta.performed_by}</>
                 )}
-                {showUserIds && log.row_id && <> &middot; ID: {log.row_id}</>}
+                {showUserIds && meta.row_id && <> &middot; ID: {meta.row_id}</>}
               </p>
             </div>
           </div>
@@ -266,7 +298,14 @@ function DataDiffModal({ log, showUserIds, onClose }) {
 
         {/* Body */}
         <div className="overflow-y-auto flex-1 px-6 py-5">
-          {hasBoth ? (
+          {errorMessage ? (
+            <p className="text-sm text-danger">{errorMessage}</p>
+          ) : loading || !log ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-ink-4">
+              <div className="h-8 w-8 rounded-full border-2 border-accent border-t-transparent animate-spin" aria-hidden />
+              <p className="text-sm">Loading details…</p>
+            </div>
+          ) : hasBoth ? (
             <div className="space-y-0">
               <div className="grid grid-cols-[1fr_1fr] gap-0 mb-3">
                 <div className="text-[11px] font-semibold text-danger uppercase tracking-wider px-3 py-1.5">Before</div>
@@ -294,7 +333,7 @@ function DataDiffModal({ log, showUserIds, onClose }) {
                 );
               })}
             </div>
-          ) : (
+          ) : hasOld || hasNew ? (
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-wider mb-3 px-1 text-ink-3">
                 {hasOld ? "Deleted Data" : "Created Data"}
@@ -312,6 +351,8 @@ function DataDiffModal({ log, showUserIds, onClose }) {
                 ))}
               </div>
             </div>
+          ) : (
+            <p className="text-sm text-ink-4">No before/after payload stored for this entry.</p>
           )}
         </div>
 

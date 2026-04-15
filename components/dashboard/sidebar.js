@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   IconUsers,
@@ -12,15 +12,17 @@ import {
   IconClock,
   IconShieldCheck,
   IconGamepad,
+  IconCheck,
 } from "@/components/icons";
 import { apiFetch } from "@/lib/dashboard/api-client";
 import { ROLES } from "@/lib/roles";
 import { useDashboardSidebar } from "@/components/dashboard/layout-context";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Leads", icon: IconUsers, permission: "view_leads" },
-  { href: "/dashboard/games", label: "Games list", icon: IconGamepad, permission: "manage_games_list" },
-  { href: "/dashboard/requests", label: "Requests", icon: IconClock, permission: "approve_signups" },
+  { href: "/dashboard", label: "Leads", icon: IconUsers, permission: "view_leads", countKey: "leads" },
+  { href: "/dashboard/customers", label: "Customers", icon: IconCheck, permission: "view_leads", countKey: "customers" },
+  { href: "/dashboard/games", label: "Games list", icon: IconGamepad, permission: "manage_games_list", countKey: "games" },
+  { href: "/dashboard/requests", label: "Requests", icon: IconClock, permission: "approve_signups", countKey: "requests" },
   { href: "/dashboard/audit", label: "Audit Log", icon: IconActivity, permission: "view_audit" },
   { href: "/dashboard/users", label: "User Management", icon: IconShield, permission: "manage_dashboard_users" },
   {
@@ -44,6 +46,39 @@ export default function Sidebar({ user }) {
   const { sidebarOpen, setSidebarOpen } = useDashboardSidebar();
   const perm = new Set(user?.permissions || []);
   const role = ROLES[user?.role] || ROLES.viewer;
+  const [navCounts, setNavCounts] = useState({ leads: null, customers: null, games: null, requests: null });
+
+  const loadNavCounts = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/dashboard/nav-counts");
+      const json = await res.json();
+      if (res.ok && json && typeof json === "object") {
+        setNavCounts({
+          leads: typeof json.leads === "number" ? json.leads : null,
+          customers: typeof json.customers === "number" ? json.customers : null,
+          games: typeof json.games === "number" ? json.games : null,
+          requests: typeof json.requests === "number" ? json.requests : null,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      void loadNavCounts();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [pathname, loadNavCounts]);
+
+  useEffect(() => {
+    const onRefresh = () => {
+      loadNavCounts();
+    };
+    window.addEventListener("dashboard:nav-counts-refresh", onRefresh);
+    return () => window.removeEventListener("dashboard:nav-counts-refresh", onRefresh);
+  }, [loadNavCounts]);
 
   const handleLogout = async () => {
     await apiFetch("/api/auth/logout", { method: "POST" });
@@ -52,7 +87,10 @@ export default function Sidebar({ user }) {
   };
 
   const isActive = (href) => {
-    if (href === "/dashboard") return pathname === "/dashboard" || pathname === "/dashboard/responses";
+    if (href === "/dashboard") {
+      return (pathname === "/dashboard" || pathname === "/dashboard/responses") && !pathname.startsWith("/dashboard/customers");
+    }
+    if (href === "/dashboard/customers") return pathname.startsWith("/dashboard/customers");
     return pathname.startsWith(href);
   };
 
@@ -119,6 +157,9 @@ export default function Sidebar({ user }) {
             }).map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);
+              const n = item.countKey != null ? navCounts[item.countKey] : null;
+              const labelWithCount =
+                item.countKey != null && n != null ? `${item.label} (${n.toLocaleString()})` : item.label;
               return (
                 <button
                   key={item.href}
@@ -134,7 +175,7 @@ export default function Sidebar({ user }) {
                   `}
                 >
                   <Icon size={17} />
-                  {item.label}
+                  <span className="min-w-0 flex-1 truncate">{labelWithCount}</span>
                 </button>
               );
             })}

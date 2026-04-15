@@ -20,6 +20,12 @@ function reorderList(list, fromIndex, toIndex) {
   return next;
 }
 
+function refreshNavCounts() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("dashboard:nav-counts-refresh"));
+  }
+}
+
 export default function GamesListClient() {
   const user = useUser();
   const toast = useToast();
@@ -158,6 +164,7 @@ export default function GamesListClient() {
         return;
       }
       toast("Game removed", "success");
+      refreshNavCounts();
       await load();
     } catch {
       toast("Delete failed", "error");
@@ -185,6 +192,7 @@ export default function GamesListClient() {
         return;
       }
       toast("Game added", "success");
+      refreshNavCounts();
       setNewName("");
       await load();
     } catch {

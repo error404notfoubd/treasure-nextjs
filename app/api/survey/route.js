@@ -246,6 +246,8 @@ export async function POST(request) {
       user_agent:         userAgent,
       consent_marketing:  consent === true || consent === 'true',
       registration_step:  'submitted',
+      bonus_granted:      false,
+      contacted:          false,
       updated_at:         nowIso,
     };
 

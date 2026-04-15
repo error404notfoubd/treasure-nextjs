@@ -28,11 +28,14 @@ export function ToastProvider({ children }) {
               text-sm shadow-xl animate-slide-in-right flex items-center gap-2
               ${t.type === "success" ? "border-l-[3px] border-l-success" : ""}
               ${t.type === "error" ? "border-l-[3px] border-l-danger" : ""}
+              ${t.type === "info" ? "border-l-[3px] border-l-accent" : ""}
             `}
           >
             <span>
               {t.type === "success" ? (
                 <span className="text-success">✓</span>
+              ) : t.type === "info" ? (
+                <span className="text-accent">ⓘ</span>
               ) : (
                 <span className="text-danger">✕</span>
               )}

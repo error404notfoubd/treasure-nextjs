@@ -6,7 +6,9 @@ import { logAction } from "@/lib/audit";
 import { rejectIfNotDashboardHost } from "@/lib/dashboard/api-host";
 import {
   FUNNEL_USERS_TABLE,
+  FUNNEL_USER_LIST_SELECT,
   mapUserRowForDashboard,
+  mapUserRowForList,
   persistUserPhone,
   persistUserEmail,
   isFunnelUserId,
@@ -20,7 +22,7 @@ function sanitizeSearch(raw) {
   return raw.replace(/[^a-zA-Z0-9@.+ -]/g, "").trim().slice(0, 200);
 }
 
-// GET /api/responses?page=0&limit=15&search=...&flagged=true
+// GET /api/responses?page=0&limit=15&search=...&flagged=true&pool=leads|customers
 export async function GET(request) {
   const hostErr = rejectIfNotDashboardHost(request);
   if (hostErr) return hostErr;
@@ -33,40 +35,84 @@ export async function GET(request) {
   const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "15") || 15), MAX_LIMIT);
   const search = sanitizeSearch(searchParams.get("search") || "");
   const flaggedOnly = searchParams.get("flagged") === "true";
+  const poolRaw = (searchParams.get("pool") || "leads").toLowerCase();
+  if (poolRaw !== "leads" && poolRaw !== "customers") {
+    return NextResponse.json({ error: "pool must be leads or customers" }, { status: 400 });
+  }
+  const pool = poolRaw;
 
   const db = getDataClient();
-  let query = db
-    .from(FUNNEL_USERS_TABLE)
-    .select("*", { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(page * limit, page * limit + limit - 1);
 
+  let namePattern = null;
+  let emailH = null;
+  let phoneH = null;
   if (search) {
     const esc = search.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-    const namePart = `full_name.ilike.%${esc}%`;
-    const parts = [namePart];
+    namePattern = `%${esc}%`;
     if (search.includes("@")) {
       const eh = emailHash(search);
-      if (eh) parts.push(`email_hash.eq.${eh}`);
+      if (eh) emailH = eh;
     }
     const e164Guess = toE164(search);
     if (e164Guess) {
       const ph = phoneHash(e164Guess);
-      if (ph) parts.push(`phone_hash.eq.${ph}`);
+      if (ph) phoneH = ph;
     }
-    query = query.or(parts.join(","));
-  }
-  if (flaggedOnly) {
-    query = query.eq("is_flagged", true);
   }
 
-  const { data, count, error } = await query;
-  if (error) {
-    console.error("[responses GET]", error.message);
+  const rpcPageArgs = {
+    p_pool: pool,
+    p_limit: limit,
+    p_offset: page * limit,
+    p_flagged_only: flaggedOnly,
+    p_name_pattern: namePattern,
+    p_email_hash: emailH,
+    p_phone_hash: phoneH,
+  };
+  const rpcCountArgs = {
+    p_pool: pool,
+    p_flagged_only: flaggedOnly,
+    p_name_pattern: namePattern,
+    p_email_hash: emailH,
+    p_phone_hash: phoneH,
+  };
+
+  const [{ data: idRows, error: rpcErr }, { data: countRaw, error: countErr }] = await Promise.all([
+    db.rpc("fn_pool_user_ids_page", rpcPageArgs),
+    db.rpc("fn_pool_user_ids_count", rpcCountArgs),
+  ]);
+
+  if (rpcErr || countErr) {
+    console.error("[responses GET rpc]", rpcErr?.message || countErr?.message);
+    return NextResponse.json(
+      {
+        error:
+          "Lead pool is not available. Run sql/migrations/20260416_leads_customers_pool.sql (and prior bonus/contacted migration if needed).",
+      },
+      { status: 503 }
+    );
+  }
+
+  const total = typeof countRaw === "number" ? countRaw : Number(countRaw) || 0;
+  const ids = (idRows || [])
+    .map((r) => (r && typeof r === "object" ? r.user_id : r))
+    .filter((x) => typeof x === "string" && isFunnelUserId(x));
+
+  if (ids.length === 0) {
+    return NextResponse.json({ data: [], total });
+  }
+
+  const { data: userRows, error: uErr } = await db
+    .from(FUNNEL_USERS_TABLE)
+    .select(FUNNEL_USER_LIST_SELECT)
+    .in("user_id", ids);
+  if (uErr) {
+    console.error("[responses GET users]", uErr.message);
     return NextResponse.json({ error: "Failed to load responses." }, { status: 500 });
   }
 
-  const rows = data || [];
+  const order = new Map(ids.map((uid, i) => [uid, i]));
+  const rows = (userRows || []).sort((a, b) => (order.get(a.user_id) ?? 0) - (order.get(b.user_id) ?? 0));
   const gameIds = [...new Set(rows.map((r) => r.favorite_game_id).filter((x) => typeof x === "string" && x))];
   const favoriteGameNames = {};
   if (gameIds.length > 0) {
@@ -79,8 +125,8 @@ export async function GET(request) {
   }
 
   return NextResponse.json({
-    data: rows.map((r) => mapUserRowForDashboard(r, favoriteGameNames)),
-    total: count,
+    data: rows.map((r) => mapUserRowForList(r, favoriteGameNames)),
+    total,
   });
 }
 
@@ -104,13 +150,36 @@ export async function PATCH(request) {
   }
   if (!updates || typeof updates !== "object") return NextResponse.json({ error: "Missing updates" }, { status: 400 });
 
+  const db = getDataClient();
+
+  const { data: oldRow, error: oldErr } = await db
+    .from(FUNNEL_USERS_TABLE)
+    .select("*")
+    .eq("user_id", id)
+    .single();
+
+  if (oldErr || !oldRow) {
+    return NextResponse.json({ error: "Record not found" }, { status: 404 });
+  }
+
   const safe = {};
-  const allowed = ["full_name", "name", "email", "phone", "frequency", "is_flagged", "notes"];
+  const BOOLEAN_LEAD_FIELDS = new Set(["is_flagged", "bonus_granted", "contacted"]);
+  const allowed = [
+    "full_name",
+    "name",
+    "email",
+    "phone",
+    "frequency",
+    "is_flagged",
+    "notes",
+    "bonus_granted",
+    "contacted",
+  ];
   for (const key of allowed) {
     if (updates[key] === undefined) continue;
-    if (key === "is_flagged") {
+    if (BOOLEAN_LEAD_FIELDS.has(key)) {
       if (typeof updates[key] !== "boolean") {
-        return NextResponse.json({ error: "is_flagged must be a boolean" }, { status: 422 });
+        return NextResponse.json({ error: `"${key}" must be a boolean` }, { status: 422 });
       }
       safe[key] = updates[key];
       continue;
@@ -171,15 +240,23 @@ export async function PATCH(request) {
     }
   }
 
+  if (updates.contacted === false) {
+    safe.bonus_granted = false;
+  }
+
+  const mergedContacted =
+    safe.contacted !== undefined ? !!safe.contacted : !!oldRow.contacted;
+  const mergedBonus =
+    safe.bonus_granted !== undefined ? !!safe.bonus_granted : !!oldRow.bonus_granted;
+
+  if (mergedBonus && !mergedContacted) {
+    return NextResponse.json(
+      { error: "Bonus cannot be granted until the lead is marked contacted." },
+      { status: 422 }
+    );
+  }
+
   safe.updated_at = new Date().toISOString();
-
-  const db = getDataClient();
-
-  const { data: oldRow } = await db
-    .from(FUNNEL_USERS_TABLE)
-    .select("*")
-    .eq("user_id", id)
-    .single();
 
   const { data, error } = await db
     .from(FUNNEL_USERS_TABLE)

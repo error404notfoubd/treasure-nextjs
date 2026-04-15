@@ -34,7 +34,7 @@ export async function GET(request) {
   const db = getDataClient();
   let query = db
     .from("audit_log")
-    .select("*")
+    .select("id, operation, table_name, performed_at, performed_by, row_id, change_summary")
     .order("performed_at", { ascending: false })
     .limit(limit);
 

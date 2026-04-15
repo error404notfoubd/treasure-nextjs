@@ -233,15 +233,18 @@ COMMENT ON COLUMN public.profiles.updated_at IS 'Last profile update (trigger-ma
 -- ═══════════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS public.audit_log (
-  id           bigserial    PRIMARY KEY,
-  table_name   text         NOT NULL,
-  operation    text         NOT NULL,
-  row_id       text,
-  old_data     jsonb,
-  new_data     jsonb,
-  performed_at timestamptz  NOT NULL DEFAULT now(),
-  performed_by text         NOT NULL DEFAULT current_user
+  id               bigserial    PRIMARY KEY,
+  table_name       text         NOT NULL,
+  operation        text         NOT NULL,
+  row_id           text,
+  old_data         jsonb,
+  new_data         jsonb,
+  change_summary   text,
+  performed_at     timestamptz  NOT NULL DEFAULT now(),
+  performed_by     text         NOT NULL DEFAULT current_user
 );
+
+ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS change_summary text;
 
 ALTER TABLE public.audit_log
   ALTER COLUMN row_id TYPE text USING row_id::text;
@@ -306,6 +309,7 @@ COMMENT ON COLUMN public.audit_log.old_data IS 'Row snapshot before change (JSON
 COMMENT ON COLUMN public.audit_log.new_data IS 'Row snapshot after change (JSONB); null on DELETE.';
 COMMENT ON COLUMN public.audit_log.performed_at IS 'When the change was recorded.';
 COMMENT ON COLUMN public.audit_log.performed_by IS 'Database role or label that performed the action.';
+COMMENT ON COLUMN public.audit_log.change_summary IS 'Short list of fields changed on UPDATE (for list UI).';
 
 -- SECTION: Create/05_rate_limit_log.sql
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -539,6 +543,8 @@ CREATE TABLE IF NOT EXISTS public.users (
   favorite_game_id    uuid REFERENCES public.favorite_games (id) ON DELETE SET NULL,
   favorite_game       text,
   is_flagged          boolean NOT NULL DEFAULT false,
+  bonus_granted       boolean NOT NULL DEFAULT false,
+  contacted           boolean NOT NULL DEFAULT false,
   notes               text,
   ip_address          inet,
   user_agent          text,
@@ -573,6 +579,9 @@ BEGIN
       );
   END IF;
 END $$;
+
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bonus_granted boolean NOT NULL DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS contacted boolean NOT NULL DEFAULT false;
 
 DROP INDEX IF EXISTS idx_users_email_hash_verified;
 CREATE UNIQUE INDEX idx_users_email_hash_verified
@@ -624,6 +633,240 @@ REVOKE ALL ON TABLE public.users FROM PUBLIC;
 REVOKE ALL ON TABLE public.users FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.users TO service_role;
 
+-- Force lead tracking flags off on insert (even if a client omits or overrides them).
+CREATE OR REPLACE FUNCTION public.users_lead_flags_false_on_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.bonus_granted := false;
+  NEW.contacted := false;
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.users_lead_flags_false_on_insert() IS 'Trigger: sets bonus_granted and contacted to false for every new public.users row.';
+
+DROP TRIGGER IF EXISTS trg_users_lead_flags_on_insert ON public.users;
+CREATE TRIGGER trg_users_lead_flags_on_insert
+  BEFORE INSERT ON public.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.users_lead_flags_false_on_insert();
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'users_bonus_requires_contacted'
+      AND conrelid = 'public.users'::regclass
+  ) THEN
+    ALTER TABLE public.users
+      ADD CONSTRAINT users_bonus_requires_contacted
+      CHECK (NOT bonus_granted OR contacted);
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS public.leads (
+  user_id uuid PRIMARY KEY REFERENCES public.users (user_id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.customers (
+  user_id uuid PRIMARY KEY REFERENCES public.users (user_id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE public.leads IS 'Funnel rows in the Leads queue (not contacted and no bonus); mutually exclusive with public.customers.';
+COMMENT ON TABLE public.customers IS 'Funnel rows out of Leads (contacted and/or bonus); mutually exclusive with public.leads.';
+
+ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'leads' AND policyname = 'deny_anon_all_leads'
+  ) THEN
+    CREATE POLICY deny_anon_all_leads ON public.leads AS RESTRICTIVE FOR ALL TO anon, authenticated
+      USING (false) WITH CHECK (false);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'customers' AND policyname = 'deny_anon_all_customers'
+  ) THEN
+    CREATE POLICY deny_anon_all_customers ON public.customers AS RESTRICTIVE FOR ALL TO anon, authenticated
+      USING (false) WITH CHECK (false);
+  END IF;
+END $$;
+
+REVOKE ALL ON TABLE public.leads FROM PUBLIC;
+REVOKE ALL ON TABLE public.leads FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.leads TO service_role;
+
+REVOKE ALL ON TABLE public.customers FROM PUBLIC;
+REVOKE ALL ON TABLE public.customers FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.customers TO service_role;
+
+CREATE OR REPLACE FUNCTION public.sync_users_pool_membership()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+  in_leads boolean;
+BEGIN
+  in_leads := (NOT COALESCE(NEW.contacted, false)) AND (NOT COALESCE(NEW.bonus_granted, false));
+
+  IF in_leads THEN
+    DELETE FROM public.customers WHERE user_id = NEW.user_id;
+    INSERT INTO public.leads (user_id) VALUES (NEW.user_id)
+      ON CONFLICT (user_id) DO NOTHING;
+  ELSE
+    DELETE FROM public.leads WHERE user_id = NEW.user_id;
+    INSERT INTO public.customers (user_id) VALUES (NEW.user_id)
+      ON CONFLICT (user_id) DO NOTHING;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.sync_users_pool_membership() IS
+  'Keeps public.leads vs public.customers mutually exclusive from users.contacted / bonus_granted.';
+
+DROP TRIGGER IF EXISTS trg_users_sync_pool_membership ON public.users;
+CREATE TRIGGER trg_users_sync_pool_membership
+  AFTER INSERT OR UPDATE OF contacted, bonus_granted ON public.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_users_pool_membership();
+
+CREATE OR REPLACE FUNCTION public.fn_pool_user_ids_page(
+  p_pool text,
+  p_limit int,
+  p_offset int,
+  p_flagged_only boolean,
+  p_name_pattern text,
+  p_email_hash text,
+  p_phone_hash text
+)
+RETURNS TABLE (user_id uuid)
+LANGUAGE plpgsql
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  IF p_pool IS NULL OR lower(p_pool) NOT IN ('leads', 'customers') THEN
+    RAISE EXCEPTION 'fn_pool_user_ids_page: p_pool must be leads or customers';
+  END IF;
+
+  IF lower(p_pool) = 'leads' THEN
+    RETURN QUERY
+    SELECT u.user_id
+    FROM public.leads l
+    INNER JOIN public.users u ON u.user_id = l.user_id
+    WHERE (NOT p_flagged_only OR u.is_flagged)
+      AND (
+        (p_name_pattern IS NULL AND p_email_hash IS NULL AND p_phone_hash IS NULL)
+        OR (p_name_pattern IS NOT NULL AND u.full_name ILIKE p_name_pattern)
+        OR (p_email_hash IS NOT NULL AND u.email_hash = p_email_hash)
+        OR (p_phone_hash IS NOT NULL AND u.phone_hash = p_phone_hash)
+      )
+    ORDER BY u.created_at DESC
+    LIMIT p_limit OFFSET p_offset;
+  ELSE
+    RETURN QUERY
+    SELECT u.user_id
+    FROM public.customers c
+    INNER JOIN public.users u ON u.user_id = c.user_id
+    WHERE (NOT p_flagged_only OR u.is_flagged)
+      AND (
+        (p_name_pattern IS NULL AND p_email_hash IS NULL AND p_phone_hash IS NULL)
+        OR (p_name_pattern IS NOT NULL AND u.full_name ILIKE p_name_pattern)
+        OR (p_email_hash IS NOT NULL AND u.email_hash = p_email_hash)
+        OR (p_phone_hash IS NOT NULL AND u.phone_hash = p_phone_hash)
+      )
+    ORDER BY u.created_at DESC
+    LIMIT p_limit OFFSET p_offset;
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.fn_pool_user_ids_count(
+  p_pool text,
+  p_flagged_only boolean,
+  p_name_pattern text,
+  p_email_hash text,
+  p_phone_hash text
+)
+RETURNS bigint
+LANGUAGE plpgsql
+STABLE
+SET search_path = public
+AS $$
+DECLARE
+  n bigint;
+BEGIN
+  IF p_pool IS NULL OR lower(p_pool) NOT IN ('leads', 'customers') THEN
+    RAISE EXCEPTION 'fn_pool_user_ids_count: p_pool must be leads or customers';
+  END IF;
+
+  IF lower(p_pool) = 'leads' THEN
+    SELECT count(*)::bigint INTO n
+    FROM public.leads l
+    INNER JOIN public.users u ON u.user_id = l.user_id
+    WHERE (NOT p_flagged_only OR u.is_flagged)
+      AND (
+        (p_name_pattern IS NULL AND p_email_hash IS NULL AND p_phone_hash IS NULL)
+        OR (p_name_pattern IS NOT NULL AND u.full_name ILIKE p_name_pattern)
+        OR (p_email_hash IS NOT NULL AND u.email_hash = p_email_hash)
+        OR (p_phone_hash IS NOT NULL AND u.phone_hash = p_phone_hash)
+      );
+  ELSE
+    SELECT count(*)::bigint INTO n
+    FROM public.customers c
+    INNER JOIN public.users u ON u.user_id = c.user_id
+    WHERE (NOT p_flagged_only OR u.is_flagged)
+      AND (
+        (p_name_pattern IS NULL AND p_email_hash IS NULL AND p_phone_hash IS NULL)
+        OR (p_name_pattern IS NOT NULL AND u.full_name ILIKE p_name_pattern)
+        OR (p_email_hash IS NOT NULL AND u.email_hash = p_email_hash)
+        OR (p_phone_hash IS NOT NULL AND u.phone_hash = p_phone_hash)
+      );
+  END IF;
+
+  RETURN n;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.fn_pool_user_ids_page(text, int, int, boolean, text, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.fn_pool_user_ids_count(text, boolean, text, text, text) TO service_role;
+
+REVOKE ALL ON FUNCTION public.fn_pool_user_ids_page(text, int, int, boolean, text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_pool_user_ids_count(text, boolean, text, text, text) FROM PUBLIC;
+
+DELETE FROM public.customers c
+USING public.users u
+WHERE c.user_id = u.user_id
+  AND (NOT COALESCE(u.contacted, false))
+  AND (NOT COALESCE(u.bonus_granted, false));
+
+DELETE FROM public.leads l
+USING public.users u
+WHERE l.user_id = u.user_id
+  AND (COALESCE(u.contacted, false) OR COALESCE(u.bonus_granted, false));
+
+INSERT INTO public.leads (user_id)
+SELECT u.user_id
+FROM public.users u
+WHERE (NOT COALESCE(u.contacted, false)) AND (NOT COALESCE(u.bonus_granted, false))
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO public.customers (user_id)
+SELECT u.user_id
+FROM public.users u
+WHERE COALESCE(u.contacted, false) OR COALESCE(u.bonus_granted, false)
+ON CONFLICT (user_id) DO NOTHING;
+
 COMMENT ON TYPE public.registration_step IS 'Funnel stage for marketing survey signups on public.users.';
 
 COMMENT ON TABLE public.users IS 'Marketing funnel signups (not auth.users): survey answers, encrypted contact, OTP verification.';
@@ -643,6 +886,8 @@ COMMENT ON COLUMN public.users.frequency IS 'Self-reported play frequency label;
 COMMENT ON COLUMN public.users.favorite_game_id IS 'Optional FK to favorite_games for legacy or catalog-backed picks.';
 COMMENT ON COLUMN public.users.favorite_game IS 'Favorite game display text (catalog name or free-text other).';
 COMMENT ON COLUMN public.users.is_flagged IS 'Staff flag for review in the leads dashboard.';
+COMMENT ON COLUMN public.users.bonus_granted IS 'Whether staff has recorded a bonus for this lead; reset to false on new survey row.';
+COMMENT ON COLUMN public.users.contacted IS 'Whether staff has contacted this lead; reset to false on new survey row.';
 COMMENT ON COLUMN public.users.notes IS 'Internal staff notes.';
 COMMENT ON COLUMN public.users.ip_address IS 'Client IP at submission (inet).';
 COMMENT ON COLUMN public.users.user_agent IS 'Truncated User-Agent header at submission.';

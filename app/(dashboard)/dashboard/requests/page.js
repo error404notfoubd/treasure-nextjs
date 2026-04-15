@@ -40,6 +40,9 @@ export default function RequestsPage() {
         action === "approve" ? "User approved" : "Request rejected",
         "success"
       );
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("dashboard:nav-counts-refresh"));
+      }
       fetchRequests();
     } catch (err) {
       toast(err.message, "error");

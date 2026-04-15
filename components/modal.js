@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { IconX } from "./icons";
 
-export default function Modal({ title, onClose, footer, children }) {
+export default function Modal({ title, onClose, footer, children, wide = false }) {
   useEffect(() => {
     const handleEsc = (e) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", handleEsc);
@@ -20,7 +20,7 @@ export default function Modal({ title, onClose, footer, children }) {
       onClick={onClose}
     >
       <div
-        className="bg-surface-2 border border-surface-4 rounded-xl w-full max-w-[480px] mx-4 shadow-2xl animate-slide-up"
+        className={`bg-surface-2 border border-surface-4 rounded-xl w-full mx-4 shadow-2xl animate-slide-up ${wide ? "max-w-3xl" : "max-w-[480px]"}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-3">
