@@ -335,8 +335,8 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
                   <th>Verified</th>
                   <th>Favorite game</th>
                   <th>Status</th>
-                  <th>Bonus</th>
                   <th>Contacted</th>
+                  <th>Bonus</th>
                   <th>Details</th>
                   {(canEdit || canDelete || canVerify) && <th>Actions</th>}
                 </tr>
@@ -379,6 +379,22 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
                         {canEdit ? (
                           <button
                             type="button"
+                            className={`badge cursor-pointer transition-opacity hover:opacity-90 ${row.contacted ? "bg-accent/15 text-accent" : "bg-surface-3 text-ink-3"}`}
+                            title={row.contacted ? "Marked contacted — click to change" : "Mark as contacted"}
+                            onClick={() => requestContactedToggle(row)}
+                          >
+                            {row.contacted ? "Yes" : "No"}
+                          </button>
+                        ) : (
+                          <span className={`badge ${row.contacted ? "bg-accent/15 text-accent" : "bg-surface-3 text-ink-3"}`}>
+                            {row.contacted ? "Yes" : "No"}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {canEdit ? (
+                          <button
+                            type="button"
                             className={`badge cursor-pointer transition-opacity hover:opacity-90 ${row.bonus_granted ? "bg-accent/15 text-accent" : "bg-surface-3 text-ink-3"} ${!row.contacted && !row.bonus_granted ? "opacity-60" : ""}`}
                             title={
                               !row.contacted && !row.bonus_granted
@@ -394,22 +410,6 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
                         ) : (
                           <span className={`badge ${row.bonus_granted ? "bg-accent/15 text-accent" : "bg-surface-3 text-ink-3"}`}>
                             {row.bonus_granted ? "Yes" : "No"}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {canEdit ? (
-                          <button
-                            type="button"
-                            className={`badge cursor-pointer transition-opacity hover:opacity-90 ${row.contacted ? "bg-accent/15 text-accent" : "bg-surface-3 text-ink-3"}`}
-                            title={row.contacted ? "Marked contacted — click to change" : "Mark as contacted"}
-                            onClick={() => requestContactedToggle(row)}
-                          >
-                            {row.contacted ? "Yes" : "No"}
-                          </button>
-                        ) : (
-                          <span className={`badge ${row.contacted ? "bg-accent/15 text-accent" : "bg-surface-3 text-ink-3"}`}>
-                            {row.contacted ? "Yes" : "No"}
                           </span>
                         )}
                       </td>
@@ -742,8 +742,8 @@ function buildCustomerDetailRows(row) {
     push("Favorite game (display)", row.favorite_game_name || row.favorite_game || "—", "favorite_game_name", "favorite_game"),
     push("Play frequency", row.frequency, "frequency"),
     push("Flagged", row.is_flagged, "is_flagged"),
-    push("Bonus granted", row.bonus_granted, "bonus_granted"),
     push("Contacted", row.contacted, "contacted"),
+    push("Bonus granted", row.bonus_granted, "bonus_granted"),
     push("Notes", row.notes, "notes"),
     push("OTP last sent at", row.otp_last_sent_at, "otp_last_sent_at"),
     push("Created at", row.created_at ?? row.submitted_at, "created_at", "submitted_at"),
