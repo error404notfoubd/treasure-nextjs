@@ -1,7 +1,21 @@
 -- =============================================================================
---  CREATE ALL TABLES — run BEFORE Create_All_functions.sql on a fresh database.
---  Schema baseline, tables, types, indexes, rules, RLS policies, table grants.
---  Does not create functions, triggers, or verification SELECTs.
+--  CREATE ALL — merged single script (tables + functions).
+--
+--  DESCRIPTION
+--  Bootstraps the app database: public schema tables (funnel users, rate limits,
+--  audit log, app settings, role permissions, favorite_games), RLS policies,
+--  indexes, COMMENT ON metadata, then triggers on auth/profiles and all RPCs
+--  used by Next.js (survey checks, rate limits, get_user_role, audit helper).
+--  Requires existing Supabase auth (profiles.id -> auth.users).
+--
+--  Run on a fresh database, or after sql/Drop_All.sql when intentionally resetting.
+--  Replaces the former two-file flow (Create_All_tables + Create_All_functions).
+-- =============================================================================
+
+-- =============================================================================
+--  PART 1 — TABLES (schema baseline through role_permission_grants)
+--  Tables, types, indexes, rules, RLS, grants, COMMENT ON metadata.
+--  Profile trigger/RPC bodies are in PART 2 below.
 -- =============================================================================
 
 -- SECTION: Create/00_schema_baseline.sql
@@ -201,6 +215,16 @@ REVOKE ALL ON TABLE public.profiles FROM anon;
 GRANT SELECT, UPDATE ON TABLE public.profiles TO authenticated;
 GRANT ALL ON TABLE public.profiles TO service_role;
 
+COMMENT ON TABLE public.profiles IS 'Dashboard staff profile; one row per auth.users with role and approval status.';
+COMMENT ON COLUMN public.profiles.id IS 'Primary key; matches auth.users.id (FK ON DELETE CASCADE).';
+COMMENT ON COLUMN public.profiles.email IS 'Login email copied from auth at signup.';
+COMMENT ON COLUMN public.profiles.full_name IS 'Display name for the management UI.';
+COMMENT ON COLUMN public.profiles.role IS 'Access level: owner, admin, editor, or viewer.';
+COMMENT ON COLUMN public.profiles.status IS 'Signup approval: pending, approved, or rejected.';
+COMMENT ON COLUMN public.profiles.avatar_url IS 'Optional profile image URL.';
+COMMENT ON COLUMN public.profiles.created_at IS 'Row creation time.';
+COMMENT ON COLUMN public.profiles.updated_at IS 'Last profile update (trigger-maintained).';
+
 
 -- SECTION: Create/04_audit_log.sql
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -273,6 +297,16 @@ REVOKE ALL ON TABLE public.audit_log FROM anon, authenticated;
 GRANT SELECT, INSERT ON TABLE public.audit_log TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.audit_log_id_seq TO service_role;
 
+COMMENT ON TABLE public.audit_log IS 'Append-only audit trail of sensitive row changes (service_role writes).';
+COMMENT ON COLUMN public.audit_log.id IS 'Surrogate key (bigserial).';
+COMMENT ON COLUMN public.audit_log.table_name IS 'Source table name for the change.';
+COMMENT ON COLUMN public.audit_log.operation IS 'INSERT, UPDATE, or DELETE.';
+COMMENT ON COLUMN public.audit_log.row_id IS 'Primary key or identifier of the affected row as text.';
+COMMENT ON COLUMN public.audit_log.old_data IS 'Row snapshot before change (JSONB); null on INSERT.';
+COMMENT ON COLUMN public.audit_log.new_data IS 'Row snapshot after change (JSONB); null on DELETE.';
+COMMENT ON COLUMN public.audit_log.performed_at IS 'When the change was recorded.';
+COMMENT ON COLUMN public.audit_log.performed_by IS 'Database role or label that performed the action.';
+
 -- SECTION: Create/05_rate_limit_log.sql
 -- ═══════════════════════════════════════════════════════════════════════════
 --  05. RATE LIMIT LOG — submission / IP tracking
@@ -316,6 +350,11 @@ REVOKE ALL ON TABLE public.rate_limit_log FROM anon, authenticated;
 GRANT SELECT, INSERT, DELETE ON TABLE public.rate_limit_log TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.rate_limit_log_id_seq TO service_role;
 
+COMMENT ON TABLE public.rate_limit_log IS 'Successful survey submissions per IP (used with fn_ip_submission_count).';
+COMMENT ON COLUMN public.rate_limit_log.id IS 'Surrogate key (bigserial).';
+COMMENT ON COLUMN public.rate_limit_log.ip_address IS 'Client IP when the submission was logged.';
+COMMENT ON COLUMN public.rate_limit_log.attempted_at IS 'Timestamp of the attempt.';
+COMMENT ON COLUMN public.rate_limit_log.success IS 'True when the survey POST completed successfully.';
 
 -- SECTION: Create/06_rate_limit_events.sql
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -360,6 +399,11 @@ REVOKE ALL ON TABLE public.rate_limit_events FROM anon, authenticated;
 GRANT SELECT, INSERT, DELETE ON TABLE public.rate_limit_events TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.rate_limit_events_id_seq TO service_role;
 
+COMMENT ON TABLE public.rate_limit_events IS 'Distributed per-IP per-route rate limit events (serverless-safe).';
+COMMENT ON COLUMN public.rate_limit_events.id IS 'Surrogate key (bigserial).';
+COMMENT ON COLUMN public.rate_limit_events.ip_address IS 'Client IP for this counted request.';
+COMMENT ON COLUMN public.rate_limit_events.route IS 'Logical route key (e.g. survey_post, survey_sms_send).';
+COMMENT ON COLUMN public.rate_limit_events.created_at IS 'When this event was recorded for sliding-window counts.';
 
 -- ═══════════════════════════════════════════════════════════════════════════
 --  OTP send events — per phone_hash rolling window (Prelude SMS cap)
@@ -397,11 +441,16 @@ REVOKE ALL ON TABLE public.otp_send_events FROM anon, authenticated;
 GRANT SELECT, INSERT, DELETE ON TABLE public.otp_send_events TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.otp_send_events_id_seq TO service_role;
 
+COMMENT ON TABLE public.otp_send_events IS 'Per-phone-hash OTP send events for rolling per-number caps (fn_check_and_record_otp_phone_send).';
+COMMENT ON COLUMN public.otp_send_events.id IS 'Surrogate key (bigserial).';
+COMMENT ON COLUMN public.otp_send_events.phone_hash IS 'Opaque hash of E.164; groups sends per handset.';
+COMMENT ON COLUMN public.otp_send_events.created_at IS 'When this send was allowed and recorded.';
 
 -- SECTION: Create/09b_favorite_games.sql
 -- ═══════════════════════════════════════════════════════════════════════════
 --  Survey catalog: favorite third-party / sweepstakes-style games (dropdown).
---  Referenced by public.users.favorite_game_id. Run before Create/10_users.sql.
+--  Optional FK from public.users.favorite_game_id; display text in favorite_game.
+--  Run before Create/10_users.sql.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS public.favorite_games (
@@ -436,6 +485,13 @@ REVOKE ALL ON TABLE public.favorite_games FROM PUBLIC;
 REVOKE ALL ON TABLE public.favorite_games FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.favorite_games TO service_role;
 
+COMMENT ON TABLE public.favorite_games IS 'Curated list of favorite-game labels for the survey dropdown.';
+COMMENT ON COLUMN public.favorite_games.id IS 'Stable UUID for catalog rows.';
+COMMENT ON COLUMN public.favorite_games.name IS 'Display label shown in survey and dashboard.';
+COMMENT ON COLUMN public.favorite_games.sort_order IS 'Ascending sort order in dropdowns.';
+COMMENT ON COLUMN public.favorite_games.is_active IS 'When false, name is hidden from new survey picks.';
+COMMENT ON COLUMN public.favorite_games.created_at IS 'When this catalog row was inserted.';
+
 INSERT INTO public.favorite_games (name, sort_order) VALUES
   ('Juwa', 10),
   ('Fire Kirin', 20),
@@ -451,7 +507,7 @@ ON CONFLICT (name) DO NOTHING;
 -- ═══════════════════════════════════════════════════════════════════════════
 --  10. FUNNEL USERS — gamified acquisition (game + dashboard; not auth.users)
 --  Depends on: 00_schema_baseline.sql
---  Run before 08_helper_functions.sql (RPCs reference this table).
+--  Referenced by RPCs in PART 2 (fn_email_exists, fn_phone_exists, etc.).
 -- ═══════════════════════════════════════════════════════════════════════════
 
 DO $$
@@ -475,11 +531,6 @@ CREATE TABLE IF NOT EXISTS public.users (
   email_encrypted     text,
   verified_at         timestamptz,
   otp_last_sent_at    timestamptz,
-  utm_source          text,
-  utm_campaign        text,
-  utm_medium          text,
-  game_score          integer NOT NULL DEFAULT 0,
-  searches_count      integer NOT NULL DEFAULT 0,
   registration_step   public.registration_step NOT NULL DEFAULT 'submitted',
   consent_marketing   boolean NOT NULL DEFAULT false,
   created_at          timestamptz NOT NULL DEFAULT now(),
@@ -573,6 +624,28 @@ REVOKE ALL ON TABLE public.users FROM PUBLIC;
 REVOKE ALL ON TABLE public.users FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.users TO service_role;
 
+COMMENT ON TYPE public.registration_step IS 'Funnel stage for marketing survey signups on public.users.';
+
+COMMENT ON TABLE public.users IS 'Marketing funnel signups (not auth.users): survey answers, encrypted contact, OTP verification.';
+COMMENT ON COLUMN public.users.user_id IS 'Primary key for this funnel row; referenced by survey session JWT.';
+COMMENT ON COLUMN public.users.full_name IS 'Display name from the survey.';
+COMMENT ON COLUMN public.users.phone_hash IS 'Opaque hash of E.164 for uniqueness and lookups without decrypting.';
+COMMENT ON COLUMN public.users.phone_encrypted IS 'Application-encrypted E.164 for authorized staff display.';
+COMMENT ON COLUMN public.users.email_hash IS 'Opaque hash of normalized email when provided; null if none.';
+COMMENT ON COLUMN public.users.email_encrypted IS 'Application-encrypted email when provided; null if none.';
+COMMENT ON COLUMN public.users.verified_at IS 'When phone OTP verification succeeded; null until verified.';
+COMMENT ON COLUMN public.users.otp_last_sent_at IS 'Last verification SMS send time (resend cooldown).';
+COMMENT ON COLUMN public.users.registration_step IS 'Funnel progress: viewed, started, submitted, verified.';
+COMMENT ON COLUMN public.users.consent_marketing IS 'Whether the user opted in to marketing on the survey.';
+COMMENT ON COLUMN public.users.created_at IS 'First submission / row insert time.';
+COMMENT ON COLUMN public.users.updated_at IS 'Last update to this row.';
+COMMENT ON COLUMN public.users.frequency IS 'Self-reported play frequency label; null if not answered.';
+COMMENT ON COLUMN public.users.favorite_game_id IS 'Optional FK to favorite_games for legacy or catalog-backed picks.';
+COMMENT ON COLUMN public.users.favorite_game IS 'Favorite game display text (catalog name or free-text other).';
+COMMENT ON COLUMN public.users.is_flagged IS 'Staff flag for review in the leads dashboard.';
+COMMENT ON COLUMN public.users.notes IS 'Internal staff notes.';
+COMMENT ON COLUMN public.users.ip_address IS 'Client IP at submission (inet).';
+COMMENT ON COLUMN public.users.user_agent IS 'Truncated User-Agent header at submission.';
 
 -- SECTION: Create/11_app_settings.sql
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -602,7 +675,7 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
   login_rate_limit_max_per_window integer NOT NULL DEFAULT 15,
   login_rate_limit_window_ms integer NOT NULL DEFAULT 60000,
   signup_rate_limit_max_per_window integer NOT NULL DEFAULT 10,
-  /** Milliseconds; bigint so values up to 30 days (2_592_000_000) fit (exceeds int4 max). */
+  -- Milliseconds; bigint so values up to 30 days (2_592_000_000) fit (exceeds int4 max).
   signup_rate_limit_window_ms bigint NOT NULL DEFAULT 3600000,
   check_availability_max_per_window integer NOT NULL DEFAULT 20,
   check_availability_window_ms integer NOT NULL DEFAULT 60000,
@@ -668,6 +741,32 @@ REVOKE ALL ON TABLE public.app_settings FROM PUBLIC;
 REVOKE ALL ON TABLE public.app_settings FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.app_settings TO service_role;
 
+COMMENT ON TABLE public.app_settings IS 'Single-row tunables (id=1): game economy, survey OTP caps, auth rate limits.';
+COMMENT ON COLUMN public.app_settings.id IS 'Must be 1; singleton configuration row.';
+COMMENT ON COLUMN public.app_settings.start_credits IS 'Default credits for new game sessions.';
+COMMENT ON COLUMN public.app_settings.bonus_credits IS 'Survey completion bonus credits.';
+COMMENT ON COLUMN public.app_settings.rtp IS 'Target return-to-player percentage for the slot.';
+COMMENT ON COLUMN public.app_settings.jackpot_rate IS 'Relative weight or rate for jackpot outcomes.';
+COMMENT ON COLUMN public.app_settings.four_of_a_kind_rate IS 'Relative weight or rate for four-of-a-kind outcomes.';
+COMMENT ON COLUMN public.app_settings.symbol_weights IS 'JSON map of reel symbol weights.';
+COMMENT ON COLUMN public.app_settings.find_payouts IS 'JSON multipliers for find / bonus outcomes.';
+COMMENT ON COLUMN public.app_settings.bet_presets IS 'JSON array of allowed bet amounts.';
+COMMENT ON COLUMN public.app_settings.reel_stop_delays IS 'JSON array of reel stop delay timings (ms).';
+COMMENT ON COLUMN public.app_settings.survey_request_body_max_chars IS 'Max JSON body size for POST /api/survey.';
+COMMENT ON COLUMN public.app_settings.otp_sends_per_phone_max IS 'Max OTP SMS attempts per phone per rolling window.';
+COMMENT ON COLUMN public.app_settings.otp_sends_per_phone_window_ms IS 'Rolling window length (ms) for OTP per-phone cap.';
+COMMENT ON COLUMN public.app_settings.survey_control_phone_e164 IS 'Optional E.164 exempt from per-phone OTP cap (QA).';
+COMMENT ON COLUMN public.app_settings.login_rate_limit_max_per_window IS 'Max login POSTs per IP per login window.';
+COMMENT ON COLUMN public.app_settings.login_rate_limit_window_ms IS 'Sliding window (ms) for login rate limit.';
+COMMENT ON COLUMN public.app_settings.signup_rate_limit_max_per_window IS 'Max signup POSTs per IP per signup window.';
+COMMENT ON COLUMN public.app_settings.signup_rate_limit_window_ms IS 'Sliding window (ms) for signup rate limit.';
+COMMENT ON COLUMN public.app_settings.check_availability_max_per_window IS 'Max username/email availability checks per IP per window.';
+COMMENT ON COLUMN public.app_settings.check_availability_window_ms IS 'Sliding window (ms) for availability checks.';
+COMMENT ON COLUMN public.app_settings.password_min_length IS 'Minimum password length for dashboard password rules.';
+COMMENT ON COLUMN public.app_settings.default_signup_role IS 'Role assigned to new dashboard signups (viewer, editor, admin).';
+COMMENT ON COLUMN public.app_settings.auth_ui_check_debounce_ms IS 'Client debounce hint for availability check calls.';
+COMMENT ON COLUMN public.app_settings.updated_at IS 'Last change to this settings row.';
+
 -- SECTION: Create/12_role_permission_grants.sql
 -- ═══════════════════════════════════════════════════════════════════════════
 --  12. ROLE PERMISSION GRANTS — which dashboard roles may perform each action
@@ -729,3 +828,350 @@ END $$;
 REVOKE ALL ON TABLE public.role_permission_grants FROM PUBLIC;
 REVOKE ALL ON TABLE public.role_permission_grants FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.role_permission_grants TO service_role;
+
+COMMENT ON TABLE public.role_permission_grants IS 'Maps dashboard permission_key to roles that may use it (composite PK).';
+COMMENT ON COLUMN public.role_permission_grants.permission_key IS 'Stable action key (e.g. view_leads, edit_leads).';
+COMMENT ON COLUMN public.role_permission_grants.role IS 'Dashboard role: owner, admin, editor, or viewer.';
+
+-- =============================================================================
+--  PART 2 — FUNCTIONS & TRIGGERS
+--  Profile/auth triggers, audit helper, RPCs, app_settings trigger, verification SELECTs.
+-- =============================================================================
+
+-- ── Functions ────────────────────────────────
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Role is never taken from user metadata (signUp options.data); only server defaults
+  -- and admin APIs may change role after insert.
+  INSERT INTO public.profiles (id, email, full_name, role, status)
+  VALUES (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', ''),
+    'viewer',
+    'pending'
+  );
+  RETURN new;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  new.updated_at = now();
+  RETURN new;
+END;
+$$;
+
+-- When a profile row is removed, remove the Auth user so auth.users stays in sync.
+-- (Deleting auth.users already CASCADE-deletes the profile via FK; this covers the reverse.)
+CREATE OR REPLACE FUNCTION public.handle_profile_deleted()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM auth.users WHERE id = OLD.id;
+  RETURN OLD;
+END;
+$$;
+
+
+-- ── Triggers ─────────────────────────────────
+CREATE OR REPLACE TRIGGER on_profile_updated
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_updated_at();
+
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+
+DROP TRIGGER IF EXISTS on_profile_deleted ON public.profiles;
+CREATE TRIGGER on_profile_deleted
+  AFTER DELETE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_profile_deleted();
+
+-- ── Trigger helper function ──────────────────
+CREATE OR REPLACE FUNCTION public.fn_audit_log()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.audit_log (table_name, operation, row_id, old_data, new_data)
+  VALUES (
+    TG_TABLE_NAME,
+    TG_OP,
+    coalesce(new.id::text, old.id::text),
+    CASE WHEN TG_OP = 'DELETE' THEN to_jsonb(old) ELSE NULL END,
+    CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN to_jsonb(new) ELSE NULL END
+  );
+  RETURN coalesce(new, old);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.fn_audit_log() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.fn_audit_log() TO service_role;
+-- SECTION: Create/08_helper_functions.sql
+-- ═══════════════════════════════════════════════════════════════════════════
+--  08. HELPER FUNCTIONS + EXECUTE GRANTS
+--  Depends on: public.profiles (01), audit/rate/otp tables (04–06), public.users (10)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.get_user_role(user_id uuid)
+RETURNS text
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT role FROM public.profiles WHERE id = user_id;
+$$;
+
+CREATE OR REPLACE FUNCTION public.fn_email_exists(p_email_hash text)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users u
+    WHERE u.email_hash IS NOT NULL
+      AND u.email_hash = p_email_hash
+      AND u.verified_at IS NOT NULL
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.fn_phone_exists(p_phone_hash text)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users u
+    WHERE u.phone_hash IS NOT NULL
+      AND u.phone_hash = p_phone_hash
+      AND u.verified_at IS NOT NULL
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.fn_survey_latest_for_normalized_phone(p_phone_hash text)
+RETURNS TABLE (user_id uuid, is_verified boolean)
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT u.user_id, (u.verified_at IS NOT NULL)
+  FROM public.users u
+  WHERE u.phone_hash IS NOT NULL
+    AND u.phone_hash = p_phone_hash
+  ORDER BY u.created_at DESC
+  LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION public.fn_ip_submission_count(p_ip inet, p_mins int DEFAULT 15)
+RETURNS int
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT count(*)::int
+  FROM public.rate_limit_log
+  WHERE ip_address = p_ip
+    AND success = true
+    AND attempted_at > now() - (p_mins || ' minutes')::interval;
+$$;
+
+CREATE OR REPLACE FUNCTION public.fn_clean_rate_log()
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  DELETE FROM public.rate_limit_log
+  WHERE attempted_at < now() - interval '24 hours';
+$$;
+
+CREATE OR REPLACE FUNCTION public.fn_check_and_record_rate_limit(
+  p_ip          inet,
+  p_route       text,
+  p_max         int,
+  p_window_secs int
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  cnt int;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext(p_ip::text || '|' || p_route)::bigint);
+
+  SELECT count(*)::int INTO cnt
+  FROM public.rate_limit_events
+  WHERE ip_address = p_ip
+    AND route = p_route
+    AND created_at > now() - (interval '1 second' * p_window_secs);
+
+  IF cnt >= p_max THEN
+    RETURN false;
+  END IF;
+
+  INSERT INTO public.rate_limit_events (ip_address, route)
+  VALUES (p_ip, p_route);
+
+  RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.fn_check_and_record_otp_phone_send(
+  p_phone_hash   text,
+  p_max          int,
+  p_window_secs  int
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  cnt int;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext('otp_phone:' || p_phone_hash)::bigint);
+
+  SELECT count(*)::int INTO cnt
+  FROM public.otp_send_events
+  WHERE phone_hash = p_phone_hash
+    AND created_at > now() - (interval '1 second' * p_window_secs);
+
+  IF cnt >= p_max THEN
+    RETURN false;
+  END IF;
+
+  INSERT INTO public.otp_send_events (phone_hash)
+  VALUES (p_phone_hash);
+
+  RETURN true;
+END;
+$$;
+
+-- OTP caps use Prelude + public.otp_send_events (fn_check_and_record_otp_phone_send).
+-- This RPC is kept for compatibility; it does not count Prelude sends (no phone in DB).
+CREATE OR REPLACE FUNCTION public.fn_otp_send_count_for_phone(p_phone text, p_window_mins int)
+RETURNS int
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT 0::int;
+$$;
+
+CREATE OR REPLACE FUNCTION public.fn_clean_rate_limit_events()
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  DELETE FROM public.rate_limit_events
+  WHERE created_at < now() - interval '3 days';
+$$;
+
+
+-- ── Grants: service_role only ────────────────
+REVOKE ALL ON FUNCTION public.get_user_role(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_user_role(uuid) TO authenticated, service_role;
+
+REVOKE ALL ON FUNCTION public.fn_email_exists(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_phone_exists(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_survey_latest_for_normalized_phone(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_ip_submission_count(inet, int) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_clean_rate_log() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_check_and_record_rate_limit(inet, text, int, int) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_check_and_record_otp_phone_send(text, int, int) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_otp_send_count_for_phone(text, int) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_clean_rate_limit_events() FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION public.fn_email_exists(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.fn_phone_exists(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.fn_survey_latest_for_normalized_phone(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.fn_ip_submission_count(inet, int) TO service_role;
+GRANT EXECUTE ON FUNCTION public.fn_clean_rate_log() TO service_role;
+GRANT EXECUTE ON FUNCTION public.fn_check_and_record_rate_limit(inet, text, int, int) TO service_role;
+GRANT EXECUTE ON FUNCTION public.fn_check_and_record_otp_phone_send(text, int, int) TO service_role;
+GRANT EXECUTE ON FUNCTION public.fn_otp_send_count_for_phone(text, int) TO service_role;
+GRANT EXECUTE ON FUNCTION public.fn_clean_rate_limit_events() TO service_role;
+
+REVOKE EXECUTE ON FUNCTION public.fn_email_exists(text) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_phone_exists(text) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_survey_latest_for_normalized_phone(text) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_ip_submission_count(inet, int) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_clean_rate_log() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_check_and_record_rate_limit(inet, text, int, int) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_check_and_record_otp_phone_send(text, int, int) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_otp_send_count_for_phone(text, int) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_clean_rate_limit_events() FROM anon, authenticated;
+CREATE OR REPLACE FUNCTION public.app_settings_set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_app_settings_updated ON public.app_settings;
+CREATE TRIGGER trg_app_settings_updated
+  BEFORE UPDATE ON public.app_settings
+  FOR EACH ROW
+  EXECUTE FUNCTION public.app_settings_set_updated_at();
+
+REVOKE ALL ON FUNCTION public.app_settings_set_updated_at() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.app_settings_set_updated_at() TO service_role;
+
+-- SECTION: Create/09_verification_queries.sql
+-- ═══════════════════════════════════════════════════════════════════════════
+--  09. VERIFICATION QUERIES — confirm RLS + policies after Create_All.sql
+-- ═══════════════════════════════════════════════════════════════════════════
+
+SELECT tablename, rowsecurity AS rls_enabled
+FROM pg_tables
+WHERE schemaname = 'public'
+  AND tablename IN (
+    'profiles',
+    'users',
+    'audit_log',
+    'rate_limit_log',
+    'rate_limit_events',
+    'otp_send_events',
+    'app_settings',
+    'role_permission_grants'
+  )
+ORDER BY tablename;
+
+SELECT tablename, policyname, permissive, roles, cmd
+FROM pg_policies
+WHERE schemaname = 'public'
+ORDER BY tablename, policyname;

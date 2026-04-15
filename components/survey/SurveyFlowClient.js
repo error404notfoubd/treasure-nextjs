@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { validateSurvey, VALID_FREQUENCIES } from '@/lib/survey/validation';
 import { toE164 } from '@/lib/phoneE164';
@@ -81,16 +81,6 @@ export default function SurveyFlowClient({
     return () => clearTimeout(timer);
   }, [resendCooldownSec]);
 
-  const readUtmFromUrl = useCallback(() => {
-    if (typeof window === 'undefined') return { utm_source: '', utm_campaign: '', utm_medium: '' };
-    const p = new URLSearchParams(window.location.search);
-    return {
-      utm_source: p.get('utm_source') || '',
-      utm_campaign: p.get('utm_campaign') || '',
-      utm_medium: p.get('utm_medium') || '',
-    };
-  }, []);
-
   const handleSubmit = async () => {
     const fullPhone = composeSurveyPhoneE164(surveyCountryCode, formPhoneNationalDigits);
     const norm = (s) => (typeof s === 'string' ? s.trim().toLowerCase() : '');
@@ -120,7 +110,6 @@ export default function SurveyFlowClient({
     }
     setFormErrors([]);
     setSubmitting(true);
-    const utm = readUtmFromUrl();
     try {
       const res = await fetch('/api/survey', {
         method: 'POST',
@@ -132,9 +121,6 @@ export default function SurveyFlowClient({
           frequency: formFreq,
           favorite_game: favoriteToSend,
           consent: String(formConsent),
-          utm_source: utm.utm_source,
-          utm_campaign: utm.utm_campaign,
-          utm_medium: utm.utm_medium,
         }),
         credentials: 'include',
       });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, startTransition } from 'react';
 import Link from 'next/link';
 
 const CONSENT_KEY = 'cookie_consent';
@@ -26,7 +26,7 @@ export default function CookieConsent({ onAccept }) {
     if (stored === 'accepted') {
       onAccept?.();
     } else {
-      setVisible(true);
+      startTransition(() => setVisible(true));
     }
 
     const onForceAccept = () => {

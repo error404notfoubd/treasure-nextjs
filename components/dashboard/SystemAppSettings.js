@@ -29,7 +29,6 @@ export default function SystemAppSettings() {
   const [searchCostPresetsText, setSearchCostPresetsText] = useState("");
   const [reelDelaysText, setReelDelaysText] = useState("");
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount load only
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -52,7 +51,7 @@ export default function SystemAppSettings() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [toast]);
 
   const setField = (key, value) => {
     setS((prev) => (prev ? { ...prev, [key]: value } : prev));

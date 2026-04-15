@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, startTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
@@ -115,7 +115,9 @@ export default function ResetPasswordPage() {
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
     );
-    applySession(supabase);
+    startTransition(() => {
+      void applySession(supabase);
+    });
   }, [applySession]);
 
   const handleSubmit = async (e) => {

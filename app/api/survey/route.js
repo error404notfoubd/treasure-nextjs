@@ -65,16 +65,13 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Request too large.' }, { status: 413 });
   }
 
-  const { name, email, phone, frequency, favorite_game, consent, utm_source, utm_campaign, utm_medium } = body;
+  const { name, email, phone, frequency, favorite_game, consent } = body;
   const strFields = {
     name,
     email,
     phone,
     frequency,
     favorite_game,
-    utm_source,
-    utm_campaign,
-    utm_medium,
   };
   for (const [key, val] of Object.entries(strFields)) {
     if (val !== undefined && val !== null && typeof val !== 'string') {
@@ -145,11 +142,6 @@ export async function POST(request) {
   const emailForDb = cleanEmail.length > 0 ? cleanEmail : null;
   const userAgent  = (request.headers.get('user-agent') || '').slice(0, 300);
   const e164       = toE164(cleanPhone);
-  const trimUtm = (v) =>
-    typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null;
-  const utmSource = trimUtm(utm_source);
-  const utmCampaign = trimUtm(utm_campaign);
-  const utmMedium = trimUtm(utm_medium);
 
   if (!e164) {
     return NextResponse.json(
@@ -254,9 +246,6 @@ export async function POST(request) {
       user_agent:         userAgent,
       consent_marketing:  consent === true || consent === 'true',
       registration_step:  'submitted',
-      utm_source:         utmSource,
-      utm_campaign:       utmCampaign,
-      utm_medium:         utmMedium,
       updated_at:         nowIso,
     };
 

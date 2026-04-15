@@ -1,8 +1,16 @@
 -- =============================================================================
---  DROP ALL — destructive teardown for objects from Create_All_tables / Create_All_functions.
---  Does NOT drop: public.profiles, profile trigger functions (handle_new_user,
+--  DROP ALL — destructive teardown for objects created by sql/Create_All.sql.
+--
+--  DESCRIPTION
+--  Removes funnel and ops tables (public.users, favorite_games, app_settings,
+--  role_permission_grants, rate_limit_*, otp_send_events, audit_log), the
+--  registration_step type, and standalone RPCs/trigger functions tied to those
+--  objects — so Create_All.sql can be re-run on a clean slate.
+--
+--  Does NOT drop: public.profiles, auth/profile triggers (handle_new_user,
 --  handle_updated_at, handle_profile_deleted), or public.get_user_role(uuid).
---  BACK UP FIRST. Re-run Create_All_tables.sql then Create_All_functions.sql afterward.
+--
+--  BACK UP FIRST. Re-run sql/Create_All.sql afterward to recreate dropped objects.
 -- =============================================================================
 
 -- ── Optional (safe if absent) ───────────────────────────────────────────────

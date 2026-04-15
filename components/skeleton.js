@@ -21,7 +21,7 @@ export function SkeletonTableRow({ cols = 6 }) {
         <td key={i} className="px-4 py-3">
           <div
             className="h-3 rounded-md bg-surface-3 animate-pulse"
-            style={{ width: `${50 + Math.random() * 40}%`, animationDelay: `${i * 75}ms` }}
+            style={{ width: `${52 + ((i * 17) % 38)}%`, animationDelay: `${i * 75}ms` }}
           />
         </td>
       ))}

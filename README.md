@@ -112,7 +112,7 @@ Role definitions and permission helpers live in **`lib/roles.js`**.
 
 ## Database
 
-Schema, RLS, and helper SQL live under **`sql/`**. See **[sql/README.md](./sql/README.md)** for how to run **`Create_All_tables.sql`** then **`Create_All_functions.sql`**, **`Drop_All.sql`**, and the security model.
+Schema, RLS, and helper SQL live under **`sql/`**. See **`[sql/README.md](./sql/README.md)`** for plain-language descriptions of **`Create_All.sql`** and **`Drop_All.sql`**. On a fresh database (or after **`Drop_All.sql`**), run **`sql/Create_All.sql`** once.
 
 ---
 
@@ -137,7 +137,7 @@ lib/
   survey/          # Survey validation, OTP/session cookies, Prelude SMS, tokens
   …                # ip, roles, rateLimit, audit, phoneE164, …
 proxy.js           # Allowlist, subdomain routing, CSRF, auth cookies (Next.js 16+ Proxy middleware)
-sql/               # Create_All_tables.sql, Create_All_functions.sql, Drop_All.sql, README
+sql/               # Create_All.sql (full schema + functions), Drop_All.sql, migrations/
 ```
 
 **Middleware:** This app uses **`proxy.js` only** (export `proxy` + `config`). Do **not** add a root **`middleware.js`** — Next.js will error if both files exist, and tooling that expects `middleware.js` should be pointed at **`proxy.js`** instead.
