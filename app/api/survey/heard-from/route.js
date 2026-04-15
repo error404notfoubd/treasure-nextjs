@@ -12,7 +12,7 @@ import { normalizeHeardFromInput } from "@/lib/survey/heard-from";
 
 export const runtime = "nodejs";
 
-// POST /api/survey/heard-from — { heardFrom: string } after phone verification, before success UI
+// POST /api/survey/heard-from — { name: string } (or heardFrom) → column heard_from; after verify, before success UI
 export async function POST(request) {
   const ip = getClientIP(request);
 
@@ -51,7 +51,8 @@ export async function POST(request) {
     return res;
   }
 
-  const normalized = normalizeHeardFromInput(body.heardFrom);
+  const rawSource = body.name ?? body.heardFrom;
+  const normalized = normalizeHeardFromInput(rawSource);
   if ("error" in normalized) {
     return NextResponse.json({ error: normalized.error }, { status: 422 });
   }
