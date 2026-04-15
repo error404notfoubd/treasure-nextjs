@@ -9,6 +9,15 @@ import { formatNanpNationalDisplay, composeSurveyPhoneE164 } from '@/lib/survey/
 /** Sentinel select value — not a real game name from the API. */
 const SURVEY_FAVORITE_GAME_OTHER = '__survey_other__';
 
+/** Post–OTP “heard about us”: preset labels sent as-is in `{ name }`; sentinel → use text box only. */
+const SURVEY_HEARD_FROM_OTHER = '__survey_heard_other__';
+const SURVEY_HEARD_FROM_PRESETS = [
+  'Facebook (Groups)',
+  'Facebook (Ads)',
+  'Friends and Family',
+];
+const SURVEY_HEARD_FROM_OTHER_LABEL = 'Others - Please Specify';
+
 function applySurveyBonusToLocalCredits(startCredits, bonusCredits) {
   if (typeof window === 'undefined') return;
   const raw = localStorage.getItem('th_credits');
@@ -48,7 +57,8 @@ export default function SurveyFlowClient({
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendCooldownSec, setResendCooldownSec] = useState(0);
-  const [heardFromName, setHeardFromName] = useState('');
+  const [heardFromChoice, setHeardFromChoice] = useState('');
+  const [heardFromOther, setHeardFromOther] = useState('');
   const [heardFromSubmitting, setHeardFromSubmitting] = useState(false);
 
   useEffect(() => {
@@ -187,7 +197,8 @@ export default function SurveyFlowClient({
         return;
       }
 
-      setHeardFromName('');
+      setHeardFromChoice('');
+      setHeardFromOther('');
       setSurveyModalStep('heard_from');
     } catch {
       setFormErrors(['Connection error. Please try again.']);
@@ -231,9 +242,16 @@ export default function SurveyFlowClient({
   };
 
   const handleHeardFromSubmit = async () => {
-    const raw = heardFromName.replace(/\s+/g, ' ').trim();
-    if (!raw) {
-      setFormErrors(['Please enter how you heard about us (e.g. Facebook Groups, Google Ads).']);
+    if (!heardFromChoice) {
+      setFormErrors(['Please choose how you heard about us.']);
+      return;
+    }
+    const raw =
+      heardFromChoice === SURVEY_HEARD_FROM_OTHER
+        ? heardFromOther.replace(/\s+/g, ' ').trim()
+        : heardFromChoice.trim();
+    if (heardFromChoice === SURVEY_HEARD_FROM_OTHER && !raw) {
+      setFormErrors(['Please fill in how you heard about us.']);
       return;
     }
     setFormErrors([]);
@@ -319,7 +337,7 @@ export default function SurveyFlowClient({
           <div className="modal-title">Almost there</div>
           <div className="modal-divider">Where did you hear about us?</div>
           <div className="modal-sub">
-            Your number is verified. Enter where you found us (one line), then we will show your bonus coins.
+            Your number is verified. Choose how you found us, then we will show your bonus coins.
           </div>
           {formErrors.length > 0 && (
             <div className="error-box">
@@ -328,19 +346,60 @@ export default function SurveyFlowClient({
               ))}
             </div>
           )}
-          <div className="field">
-            <label htmlFor="survey-heard-from-name">
+          <div className="field" style={{ marginBottom: 0 }}>
+            <div className="modal-sub" style={{ marginBottom: '10px', fontWeight: 600 }}>
               Where did you hear about us? <span aria-hidden="true">*</span>
-            </label>
-            <input
-              id="survey-heard-from-name"
-              type="text"
-              autoComplete="off"
-              placeholder="e.g. Facebook (Groups), Facebook (Ads), Google Ads, or type other source"
-              aria-required="true"
-              value={heardFromName}
-              onChange={(e) => setHeardFromName(e.target.value)}
-            />
+            </div>
+            <div
+              role="radiogroup"
+              aria-label="Where did you hear about us?"
+              style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}
+            >
+              {SURVEY_HEARD_FROM_PRESETS.map((label) => (
+                <label
+                  key={label}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                >
+                  <input
+                    type="radio"
+                    name="survey-heard-from"
+                    value={label}
+                    checked={heardFromChoice === label}
+                    onChange={() => {
+                      setHeardFromChoice(label);
+                      setHeardFromOther('');
+                    }}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="survey-heard-from"
+                  value={SURVEY_HEARD_FROM_OTHER}
+                  checked={heardFromChoice === SURVEY_HEARD_FROM_OTHER}
+                  onChange={() => setHeardFromChoice(SURVEY_HEARD_FROM_OTHER)}
+                  style={{ marginTop: '4px' }}
+                />
+                <span style={{ flex: 1 }}>
+                  {SURVEY_HEARD_FROM_OTHER_LABEL}
+                  {heardFromChoice === SURVEY_HEARD_FROM_OTHER ? (
+                    <div className="field" style={{ marginTop: '10px', marginBottom: 0 }}>
+                      <label htmlFor="survey-heard-from-other">Please specify</label>
+                      <input
+                        id="survey-heard-from-other"
+                        type="text"
+                        autoComplete="off"
+                        placeholder="Type here"
+                        value={heardFromOther}
+                        onChange={(e) => setHeardFromOther(e.target.value)}
+                      />
+                    </div>
+                  ) : null}
+                </span>
+              </label>
+            </div>
           </div>
           <button
             type="button"
