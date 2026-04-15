@@ -590,7 +590,7 @@ export default function SurveyFlowClient({
                   aria-describedby="survey-favorite-other-hint"
                 />
                 <p id="survey-favorite-other-hint" className="modal-sub" style={{ marginTop: '8px', marginBottom: 0 }}>
-                  If your game is not in the list, type it here. If it matches a listed name, we save the official list
+                  If your game is not in the list, type it here. 
                   name.
                 </p>
               </div>
