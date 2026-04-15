@@ -3,6 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { validateSurvey, VALID_FREQUENCIES } from '@/lib/survey/validation';
+import {
+  HEARD_FROM_PRESET_LABELS,
+  HEARD_FROM_OTHER_VALUE,
+} from '@/lib/survey/heard-from';
 import { toE164 } from '@/lib/phoneE164';
 import { formatNanpNationalDisplay, composeSurveyPhoneE164 } from '@/lib/survey/phone-national';
 
@@ -48,6 +52,9 @@ export default function SurveyFlowClient({
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendCooldownSec, setResendCooldownSec] = useState(0);
+  const [heardFromChoice, setHeardFromChoice] = useState('');
+  const [heardFromOther, setHeardFromOther] = useState('');
+  const [heardFromSubmitting, setHeardFromSubmitting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,14 +192,9 @@ export default function SurveyFlowClient({
         return;
       }
 
-      if (variant === 'page') {
-        applySurveyBonusToLocalCredits(startCredits, bonusCredits);
-      }
-      if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
-        window.fbq('track', 'CompleteRegistration');
-      }
-      setSurveyModalStep('success');
-      onVerifiedSuccess?.();
+      setHeardFromChoice('');
+      setHeardFromOther('');
+      setSurveyModalStep('heard_from');
     } catch {
       setFormErrors(['Connection error. Please try again.']);
     } finally {
@@ -231,6 +233,58 @@ export default function SurveyFlowClient({
       setFormErrors(['Connection error. Please try again.']);
     } finally {
       setResending(false);
+    }
+  };
+
+  const handleHeardFromSubmit = async () => {
+    const raw =
+      heardFromChoice === HEARD_FROM_OTHER_VALUE
+        ? heardFromOther.replace(/\s+/g, ' ').trim()
+        : heardFromChoice.trim();
+    if (!heardFromChoice) {
+      setFormErrors(['Please choose how you heard about us.']);
+      return;
+    }
+    if (heardFromChoice === HEARD_FROM_OTHER_VALUE && raw.length < 2) {
+      setFormErrors(['Please tell us a little more in the text box (at least 2 characters).']);
+      return;
+    }
+    setFormErrors([]);
+    setHeardFromSubmitting(true);
+    try {
+      const res = await fetch('/api/survey/heard-from', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ heardFrom: raw }),
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (res.status === 401) {
+        setFormErrors([data.error || 'Session expired. Please submit the survey again.']);
+        setSurveyModalStep('form');
+        return;
+      }
+      if (res.status === 422) {
+        setFormErrors([data.error || 'Please check your answer.']);
+        return;
+      }
+      if (!res.ok) {
+        setFormErrors([data.error || 'Could not save. Please try again.']);
+        return;
+      }
+
+      if (variant === 'page') {
+        applySurveyBonusToLocalCredits(startCredits, bonusCredits);
+      }
+      if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
+        window.fbq('track', 'CompleteRegistration');
+      }
+      setSurveyModalStep('success');
+      onVerifiedSuccess?.();
+    } catch {
+      setFormErrors(['Connection error. Please try again.']);
+    } finally {
+      setHeardFromSubmitting(false);
     }
   };
 
@@ -273,6 +327,85 @@ export default function SurveyFlowClient({
             </Link>
           )}
         </div>
+      ) : surveyModalStep === 'heard_from' ? (
+        <div className="form-state" id="heard-from-state">
+          <div className="modal-title">Almost there</div>
+          <div className="modal-divider">Where did you hear about us?</div>
+          <div className="modal-sub">
+            Your number is verified. Tell us how you found us, then we will show your bonus coins.
+          </div>
+          {formErrors.length > 0 && (
+            <div className="error-box">
+              {formErrors.map((e, i) => (
+                <div key={i}>{e}</div>
+              ))}
+            </div>
+          )}
+          <div className="field" style={{ marginBottom: 0 }}>
+            <div className="modal-sub" style={{ marginBottom: '10px', fontWeight: 600 }}>
+              Choose one <span aria-hidden="true">*</span>
+            </div>
+            <div
+              role="radiogroup"
+              aria-label="Where did you hear about us?"
+              style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}
+            >
+              {HEARD_FROM_PRESET_LABELS.map((label) => (
+                <label
+                  key={label}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                >
+                  <input
+                    type="radio"
+                    name="heard-from"
+                    value={label}
+                    checked={heardFromChoice === label}
+                    onChange={() => {
+                      setHeardFromChoice(label);
+                      setHeardFromOther('');
+                    }}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="heard-from"
+                  value={HEARD_FROM_OTHER_VALUE}
+                  checked={heardFromChoice === HEARD_FROM_OTHER_VALUE}
+                  onChange={() => setHeardFromChoice(HEARD_FROM_OTHER_VALUE)}
+                  style={{ marginTop: '4px' }}
+                />
+                <span style={{ flex: 1 }}>
+                  Others (Please Specify)
+                  {heardFromChoice === HEARD_FROM_OTHER_VALUE ? (
+                    <div className="field" style={{ marginTop: '10px', marginBottom: 0 }}>
+                      <label htmlFor="survey-heard-other">Please specify</label>
+                      <input
+                        id="survey-heard-other"
+                        type="text"
+                        placeholder="Type here"
+                        autoComplete="off"
+                        value={heardFromOther}
+                        onChange={(e) => setHeardFromOther(e.target.value)}
+                      />
+                    </div>
+                  ) : null}
+                </span>
+              </label>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="submit-btn"
+            disabled={heardFromSubmitting}
+            onClick={handleHeardFromSubmit}
+            style={{ marginTop: '16px' }}
+          >
+            {heardFromSubmitting ? 'Saving…' : 'Continue'}
+          </button>
+        </div>
       ) : surveyModalStep === 'otp' ? (
         <div className="form-state" id="otp-state">
           <div className="modal-title">Check your phone</div>
@@ -280,7 +413,7 @@ export default function SurveyFlowClient({
           <div className="modal-sub">
             We sent a code to the number you provided.
             <br />
-            Enter it below to verify and add coins to your game.
+            Enter it below to verify your number. You will unlock bonus coins on the next step.
           </div>
           {formErrors.length > 0 && (
             <div className="error-box">
@@ -302,7 +435,7 @@ export default function SurveyFlowClient({
             />
           </div>
           <button type="button" className="submit-btn" disabled={verifying} onClick={handleVerifyOtp}>
-            {verifying ? 'Verifying...' : 'Verify & unlock coins'}
+            {verifying ? 'Verifying...' : 'Verify phone'}
           </button>
           <button
             type="button"
@@ -523,6 +656,10 @@ export default function SurveyFlowClient({
           <button type="button" className="survey-back-text" onClick={goBackToSurveyForm}>
             ← Back to survey
           </button>
+        ) : surveyModalStep === 'heard_from' ? (
+          <p className="survey-back-text" style={{ cursor: 'default', opacity: 0.75 }}>
+            Phone verified — one quick question left
+          </p>
         ) : null}
         <div className="modal survey-standalone-card">{inner}</div>
       </main>

@@ -542,6 +542,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   frequency           text,
   favorite_game_id    uuid REFERENCES public.favorite_games (id) ON DELETE SET NULL,
   favorite_game       text,
+  heard_from          text,
   is_flagged          boolean NOT NULL DEFAULT false,
   bonus_granted       boolean NOT NULL DEFAULT false,
   contacted           boolean NOT NULL DEFAULT false,
@@ -582,6 +583,7 @@ END $$;
 
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bonus_granted boolean NOT NULL DEFAULT false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS contacted boolean NOT NULL DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS heard_from text;
 
 DROP INDEX IF EXISTS idx_users_email_hash_verified;
 CREATE UNIQUE INDEX idx_users_email_hash_verified
@@ -885,6 +887,7 @@ COMMENT ON COLUMN public.users.updated_at IS 'Last update to this row.';
 COMMENT ON COLUMN public.users.frequency IS 'Self-reported play frequency label; null if not answered.';
 COMMENT ON COLUMN public.users.favorite_game_id IS 'Optional FK to favorite_games for legacy or catalog-backed picks.';
 COMMENT ON COLUMN public.users.favorite_game IS 'Favorite game display text (catalog name or free-text other).';
+COMMENT ON COLUMN public.users.heard_from IS 'How the respondent heard about us (survey after verify): preset label or custom text.';
 COMMENT ON COLUMN public.users.is_flagged IS 'Staff flag for review in the leads dashboard.';
 COMMENT ON COLUMN public.users.bonus_granted IS 'Whether staff has recorded a bonus for this lead; reset to false on new survey row.';
 COMMENT ON COLUMN public.users.contacted IS 'Whether staff has contacted this lead; reset to false on new survey row.';

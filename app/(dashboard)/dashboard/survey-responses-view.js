@@ -234,7 +234,7 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
   };
 
   const totalPages = Math.ceil(total / perPage);
-  const tableColCount = 9 + (canEdit || canDelete || canVerify ? 1 : 0);
+  const tableColCount = 10 + (canEdit || canDelete || canVerify ? 1 : 0);
 
   return (
     <>
@@ -332,6 +332,7 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
                   <th>Name</th>
                   <th>Phone</th>
                   <th>Email</th>
+                  <th>From</th>
                   <th>Verified</th>
                   <th>Favorite game</th>
                   <th>Status</th>
@@ -356,6 +357,11 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
                       <td className="font-semibold text-ink-1">{row.name}</td>
                       <td className="font-mono text-xs text-ink-2">{row.phone}</td>
                       <td className="text-ink-2">{row.email || "—"}</td>
+                      <td className="text-ink-2 text-sm max-w-[160px]">
+                        <span className="line-clamp-2" title={row.heardFrom || undefined}>
+                          {row.heardFrom || "—"}
+                        </span>
+                      </td>
                       <td>
                         <span
                           className={`badge ${row.verified ? "bg-accent/10 text-accent" : "bg-danger-muted text-danger"}`}
@@ -735,6 +741,7 @@ function buildCustomerDetailRows(row) {
     push("Full name", row.full_name || row.name, "full_name", "name"),
     push("Phone", row.phone, "phone"),
     push("Email", row.email, "email"),
+    push("From", row.heard_from ?? row.heardFrom, "heard_from", "heardFrom"),
     push("Verified", row.verified, "verified"),
     push("Verified at", row.verified_at, "verified_at"),
     push("Registration step", row.registration_step, "registration_step"),

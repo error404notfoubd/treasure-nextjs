@@ -170,6 +170,7 @@ export async function PATCH(request) {
     "email",
     "phone",
     "frequency",
+    "heard_from",
     "is_flagged",
     "notes",
     "bonus_granted",
@@ -198,6 +199,10 @@ export async function PATCH(request) {
     }
     if (key === "full_name") {
       safe.full_name = raw;
+      continue;
+    }
+    if (key === "heard_from") {
+      safe.heard_from = raw && raw.length ? raw : null;
       continue;
     }
     safe[key] = raw;

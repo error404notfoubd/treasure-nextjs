@@ -125,8 +125,9 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Could not save verification. Please try again.' }, { status: 500 });
     }
 
+    // Keep survey session cookie until POST /api/survey/heard-from saves attribution
+    // (then that route clears the cookie before the bonus success screen).
     const res = NextResponse.json({ success: true, verified: true }, { status: 200 });
-    res.headers.append('Set-Cookie', buildSurveySessionClearCookie());
     return res;
   } catch (err) {
     console.error('[survey/verify]', err?.message ?? err);
