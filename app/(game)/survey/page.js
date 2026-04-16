@@ -1,4 +1,4 @@
-import GAME_CONFIG from '@/lib/config';
+import GAME_CONFIG, { siteConfig } from '@/lib/config';
 import { getAppSettings, slotGameEconomyForConfig } from '@/lib/settings/app-settings';
 import SurveyFlowClient from '@/components/survey/SurveyFlowClient';
 
@@ -19,6 +19,8 @@ export default async function SurveyPage() {
       surveyCountryCode={surveyCountryCode}
       bonusCredits={config.BONUS_CREDITS}
       startCredits={config.START_CREDITS}
+      siteName={siteConfig.NAME}
+      facebookPageUrl={typeof siteConfig.FACEBOOK_PAGE_URL === 'string' ? siteConfig.FACEBOOK_PAGE_URL.trim() : ''}
     />
   );
 }

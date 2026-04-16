@@ -18,6 +18,16 @@ const SURVEY_HEARD_FROM_PRESETS = [
 ];
 const SURVEY_HEARD_FROM_OTHER_LABEL = 'Others - Please Specify';
 
+function isHttpUrlForSurvey(s) {
+  if (typeof s !== 'string' || !s.trim()) return false;
+  try {
+    const u = new URL(s.trim());
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function applySurveyBonusToLocalCredits(startCredits, bonusCredits) {
   if (typeof window === 'undefined') return;
   const raw = localStorage.getItem('th_credits');
@@ -35,6 +45,8 @@ export default function SurveyFlowClient({
   bonusCredits,
   startCredits,
   entryStep = 'form',
+  siteName = 'Treasure Hunt',
+  facebookPageUrl = '',
   onVerifiedSuccess,
   onDismissSuccess,
 }) {
@@ -60,6 +72,9 @@ export default function SurveyFlowClient({
   const [heardFromChoice, setHeardFromChoice] = useState('');
   const [heardFromOther, setHeardFromOther] = useState('');
   const [heardFromSubmitting, setHeardFromSubmitting] = useState(false);
+  /** User used the in-app “Follow us on Facebook” control (opens your Page). Not cryptographic proof of follow — that requires Meta APIs. */
+  const [facebookPageOpened, setFacebookPageOpened] = useState(false);
+  const [facebookFollowAcknowledged, setFacebookFollowAcknowledged] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -199,7 +214,9 @@ export default function SurveyFlowClient({
 
       setHeardFromChoice('');
       setHeardFromOther('');
-      setSurveyModalStep('heard_from');
+      setFacebookPageOpened(false);
+      setFacebookFollowAcknowledged(false);
+      setSurveyModalStep(isHttpUrlForSurvey(facebookPageUrl) ? 'facebook_follow' : 'heard_from');
     } catch {
       setFormErrors(['Connection error. Please try again.']);
     } finally {
@@ -300,9 +317,7 @@ export default function SurveyFlowClient({
           <div className="success-title">Thank You!</div>
           <div className="modal-divider">Verified</div>
           <div className="success-sub">
-            Your number is verified and your response is saved.
-            <br />
-            Thank you.
+            Thank you for your response. You can now return tothe game to play with your bonus coins.
           </div>
           <div className="success-sub" style={{ marginTop: '12px' }}>
             {variant === 'modal' ? 'Coins added to your chest:' : 'Bonus coins for the treasure hunt:'}
@@ -334,10 +349,10 @@ export default function SurveyFlowClient({
         </div>
       ) : surveyModalStep === 'heard_from' ? (
         <div className="form-state" id="heard-from-state">
-          <div className="modal-title">Almost there</div>
+          <div className="modal-title">Final Step to Claim Your Coins</div>
           <div className="modal-divider">Where did you hear about us?</div>
           <div className="modal-sub">
-            Your number is verified. Choose an option below, then we will show your bonus coins.
+            <strong>This is the final step.</strong> Tell us where you heard about us.
           </div>
           {formErrors.length > 0 && (
             <div className="error-box">
@@ -398,6 +413,87 @@ export default function SurveyFlowClient({
             {heardFromSubmitting ? 'Saving…' : 'Continue'}
           </button>
         </div>
+      ) : surveyModalStep === 'facebook_follow' ? (
+        <div className="form-state" id="facebook-follow-state">
+          <div className="modal-title">Almost there</div>
+          <div className="modal-divider">Follow us on Facebook</div>
+          <p className="modal-sub" style={{ marginBottom: '14px' }}>
+            You&apos;re almost there for the <strong>{bonusCredits} bonus coins</strong>. Use the button below to open
+            our Facebook page, follow and send us a text, then come back here to continue. This action will be automatically confirmed.
+          </p>
+          {formErrors.length > 0 && (
+            <div className="error-box">
+              {formErrors.map((e, i) => (
+                <div key={i}>{e}</div>
+              ))}
+            </div>
+          )}
+          <p
+            className="survey-facebook-highlight"
+            style={{
+              margin: '0 0 12px',
+              padding: '12px 14px',
+              borderRadius: '10px',
+              fontSize: '14px',
+              lineHeight: 1.45,
+              fontWeight: 600,
+              textAlign: 'center',
+              color: '#1a2332',
+              background: 'linear-gradient(135deg, #fde68a 0%, #fcd34d 100%)',
+              border: '1px solid #d97706',
+              boxShadow: '0 1px 0 rgba(0,0,0,0.06)',
+            }}
+          >
+            {`Follow us on Facebook and leave us a message saying "TREASURE2020".`}
+          </p>
+          <a
+            href={facebookPageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="submit-btn"
+            style={{
+              display: 'block',
+              textAlign: 'center',
+              textDecoration: 'none',
+              marginBottom: '12px',
+            }}
+            onClick={() => setFacebookPageOpened(true)}
+            onAuxClick={(e) => {
+              if (e.button === 1) setFacebookPageOpened(true);
+            }}
+          >
+            Go to facebook page
+          </a>
+          {!facebookPageOpened ? (
+            <p className="modal-sub" style={{ marginBottom: '12px', fontSize: '12px' }}>
+              {`Please follow our facebook page and send us a text with the code "TREASURE2020" to claim your coins. You can confirm below after following and texting the page.`}
+            </p>
+          ) : null}
+          <div className="consent-row" style={{ marginBottom: '14px', opacity: facebookPageOpened ? 1 : 0.55 }}>
+            <input
+              type="checkbox"
+              id="survey-facebook-follow-ack"
+              disabled={!facebookPageOpened}
+              checked={facebookFollowAcknowledged}
+              onChange={(e) => setFacebookFollowAcknowledged(e.target.checked)}
+            />
+            <label htmlFor="survey-facebook-follow-ack" style={{ cursor: facebookPageOpened ? 'pointer' : 'not-allowed' }}>
+              I have followed and texted {siteName} on Facebook
+            </label>
+          </div>
+          <button
+            type="button"
+            className="submit-btn"
+            disabled={!facebookPageOpened || !facebookFollowAcknowledged}
+            onClick={() => {
+              setFormErrors([]);
+              setSurveyModalStep('heard_from');
+            }}
+            style={{ marginTop: '4px' }}
+          >
+            Claim your coins
+          </button>
+        </div>
       ) : surveyModalStep === 'otp' ? (
         <div className="form-state" id="otp-state">
           <div className="modal-title">Check your phone</div>
@@ -405,7 +501,14 @@ export default function SurveyFlowClient({
           <div className="modal-sub">
             We sent a code to the number you provided.
             <br />
-            Enter it below to verify your number. You will unlock bonus coins on the next step.
+            {isHttpUrlForSurvey(facebookPageUrl) ? (
+              <>
+                Enter it below to verify your number. Next you&apos;ll open our Facebook page, then one last question
+                for your bonus coins.
+              </>
+            ) : (
+              <>Enter it below to verify your number. You will unlock bonus coins on the next step.</>
+            )}
           </div>
           {formErrors.length > 0 && (
             <div className="error-box">
@@ -448,6 +551,8 @@ export default function SurveyFlowClient({
                 setSurveyModalStep('form');
                 setFormOtp('');
                 setFormErrors([]);
+                setFacebookPageOpened(false);
+                setFacebookFollowAcknowledged(false);
               }}
             >
               Back
@@ -469,8 +574,8 @@ export default function SurveyFlowClient({
               </>
             ) : (
               <>
-                Tell us a bit about how you play. After phone verification we add{' '}
-                <strong>{bonusCredits} bonus coins</strong> to your treasure hunt balance when you open the game.
+                Tell us a bit about how you play. <br />After you completethe survey {' '}
+                <strong>{bonusCredits} bonus coins</strong> will be added to your balance.
               </>
             )}
           </div>
@@ -635,6 +740,8 @@ export default function SurveyFlowClient({
     setSurveyModalStep('form');
     setFormOtp('');
     setFormErrors([]);
+    setFacebookPageOpened(false);
+    setFacebookFollowAcknowledged(false);
   };
 
   if (variant === 'page') {
@@ -648,9 +755,9 @@ export default function SurveyFlowClient({
           <button type="button" className="survey-back-text" onClick={goBackToSurveyForm}>
             ← Back to survey
           </button>
-        ) : surveyModalStep === 'heard_from' ? (
+        ) : surveyModalStep === 'facebook_follow' ? null : surveyModalStep === 'heard_from' ? (
           <p className="survey-back-text" style={{ cursor: 'default', opacity: 0.75 }}>
-            Phone verified — one quick question left
+            Phone verified — final question below
           </p>
         ) : null}
         <div className="modal survey-standalone-card">{inner}</div>

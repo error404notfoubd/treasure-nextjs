@@ -143,6 +143,7 @@ export default function SlotGame({ config }) {
     SEARCH_COST_PRESETS,
     CHEST_PULSE_MS: chestPulseMs,
     SLOT_UI,
+    FACEBOOK_PAGE_URL: facebookPageUrl = '',
   } = config;
 
   const { HYDRATION_DELAY_MS } = SLOT_UI;
@@ -888,6 +889,32 @@ export default function SlotGame({ config }) {
             Get coins
           </Link>
         </div>
+
+        {facebookPageUrl ? (
+          <section className="survey-banner facebook-contact-banner" aria-labelledby="fb-contact-heading">
+            <div className="sb-text">
+              <h2 id="fb-contact-heading" className="fb-contact-heading">
+                Player support
+              </h2>
+              <p className="fb-contact-lead">
+                Questions about your coins, bonuses, or how the game works? Our team answers on{' '}
+                <strong>Facebook</strong> — usually within a day.
+              </p>
+              <p className="fb-contact-highlight">
+                Open our official page in a new tab, then send us a message.
+              </p>
+            </div>
+            <a
+              href={facebookPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="signup-btn fb-contact-cta"
+              aria-label="Open our Facebook page in a new tab (player support)"
+            >
+              Open Facebook
+            </a>
+          </section>
+        ) : null}
 
         <div className="footer">
           Free game for entertainment only. No purchase required.<br/>

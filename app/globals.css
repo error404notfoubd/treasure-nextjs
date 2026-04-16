@@ -548,6 +548,66 @@ a.signup-btn{
 }
 .signup-btn:active{transform:translateY(3px);}
 
+/* Homepage — Facebook player support (paired with survey banner; calmer, no pulse) */
+.survey-banner.facebook-contact-banner{
+  animation:none;
+  border-color:rgba(251,191,36,.32);
+  box-shadow:0 0 0 1px rgba(0,0,0,.12),0 4px 20px rgba(251,191,36,.06);
+  flex-wrap:wrap;
+}
+.survey-banner.facebook-contact-banner .sb-text{
+  max-width:min(100%,38rem);
+}
+.facebook-contact-heading{
+  margin:0 0 4px;
+  padding:0;
+  font-family:var(--font-display);
+  font-size:clamp(10px,3vw,12px);
+  font-weight:600;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  color:#c8f5d8;
+  text-shadow:0 0 12px rgba(40,232,122,.25);
+}
+.facebook-contact-banner .fb-contact-lead{
+  margin:0 0 10px;
+  font-family:var(--font-body);
+  font-size:clamp(12px,3.1vw,15px);
+  line-height:1.65;
+  letter-spacing:0.02em;
+  font-weight:500;
+  color:#c4ead4;
+  text-rendering:optimizeLegibility;
+  -webkit-font-smoothing:antialiased;
+}
+.facebook-contact-banner .fb-contact-lead strong{
+  color:#e8faf0;
+  font-weight:700;
+}
+.facebook-contact-banner .fb-contact-highlight{
+  margin:0;
+  padding:10px 12px;
+  border-radius:10px;
+  font-family:var(--font-body);
+  font-size:clamp(11px,2.9vw,13px);
+  line-height:1.5;
+  font-weight:600;
+  text-align:left;
+  color:#1a2332;
+  background:linear-gradient(135deg,#fde68a 0%,#fcd34d 100%);
+  border:1px solid #d97706;
+  box-shadow:0 1px 0 rgba(0,0,0,0.06);
+}
+a.signup-btn.fb-contact-cta{
+  align-self:center;
+}
+@media (max-width:380px){
+  .survey-banner.facebook-contact-banner .signup-btn.fb-contact-cta{
+    width:100%;
+    margin-top:4px;
+  }
+}
+
 /* Highlight state when credits reach 0 */
 .survey-banner.highlight{
   border-color:rgba(40,232,122,.7);
