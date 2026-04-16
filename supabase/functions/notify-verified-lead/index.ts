@@ -34,36 +34,6 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Show only opaque hash prefixes; never decrypted contact. */
-function maskHash(h: unknown): string {
-  if (h == null || h === "") return "—";
-  const s = String(h).trim();
-  if (s.length <= 6) return `${s.slice(0, 2)}…`;
-  return `${s.slice(0, 6)}…${s.slice(-4)}`;
-}
-
-function fmtBool(v: unknown): string {
-  if (v === true) return "Yes";
-  if (v === false) return "No";
-  return "—";
-}
-
-function fmtTs(v: unknown): string {
-  if (v == null || v === "") return "—";
-  try {
-    const d = new Date(String(v));
-    if (Number.isNaN(d.getTime())) return escapeHtml(String(v));
-    return escapeHtml(d.toISOString());
-  } catch {
-    return "—";
-  }
-}
-
-function fmtIp(v: unknown): string {
-  if (v == null || v === "") return "—";
-  return escapeHtml(String(v));
-}
-
 function isNewlyVerified(
   type: string | undefined,
   record: Record<string, unknown>,
@@ -95,20 +65,11 @@ function isNewlyVerified(
 function buildLeadEmailHtml(args: {
   lead: Record<string, unknown>;
   dashboardUrl: string;
-  phoneHashMasked: string;
-  emailHashMasked: string;
 }): string {
-  const { lead, dashboardUrl, phoneHashMasked, emailHashMasked } = args;
+  const { lead, dashboardUrl } = args;
   const name = escapeHtml(String(lead.full_name ?? "—"));
   const game = escapeHtml(String(lead.favorite_game ?? "—"));
-  const freq = escapeHtml(String(lead.frequency ?? "—"));
   const heard = escapeHtml(String(lead.heard_from ?? "—"));
-  const consent = fmtBool(lead.consent_marketing);
-  const step = escapeHtml(String(lead.registration_step ?? "—"));
-  const ip = fmtIp(lead.ip_address);
-  const flagged = fmtBool(lead.is_flagged);
-  const ts = fmtTs(lead.verified_at ?? lead.updated_at);
-  const userId = escapeHtml(String(lead.user_id ?? "—"));
 
   const ctaHref = escapeHtml(`${dashboardUrl.replace(/\/$/, "")}/dashboard`);
 
@@ -132,21 +93,13 @@ function buildLeadEmailHtml(args: {
           </tr>
           <tr>
             <td style="padding:24px;color:#e8edf5;font-size:14px;line-height:1.55;">
-              <p style="margin:0 0 16px;color:#b8c5d9;">A customer completed phone verification. Summary below (contact remains encrypted in the database).</p>
+              <p style="margin:0 0 16px;color:#b8c5d9;">A customer completed phone verification.</p>
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
                 <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;width:38%;vertical-align:top;">Name</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;font-weight:500;">${name}</td></tr>
                 <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Favorite game</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;">${game}</td></tr>
-                <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Frequency</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;">${freq}</td></tr>
                 <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Heard from</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;">${heard}</td></tr>
-                <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Marketing consent</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;">${escapeHtml(consent)}</td></tr>
-                <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Registration step</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;">${step}</td></tr>
-                <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">IP address</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;font-family:ui-monospace,Menlo,monospace;font-size:13px;">${ip}</td></tr>
-                <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Flagged</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;">${escapeHtml(flagged)}</td></tr>
-                <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Verified at</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;font-family:ui-monospace,Menlo,monospace;font-size:12px;">${ts}</td></tr>
-                <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Lead ID</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;font-family:ui-monospace,Menlo,monospace;font-size:11px;word-break:break-all;">${userId}</td></tr>
-                <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Phone hash</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;font-family:ui-monospace,Menlo,monospace;font-size:12px;">${escapeHtml(phoneHashMasked)}</td></tr>
-                <tr><td style="padding:10px 0;color:#8ba4c7;vertical-align:top;">Email hash</td><td style="padding:10px 0;font-family:ui-monospace,Menlo,monospace;font-size:12px;">${escapeHtml(emailHashMasked)}</td></tr>
               </table>
+              <p style="margin:18px 0 0;color:#c5d0e0;font-size:14px;line-height:1.55;">The user has verified their phone number.</p>
               <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:28px;">
                 <tr>
                   <td style="border-radius:8px;background:#3b82f6;">
@@ -276,17 +229,12 @@ Deno.serve(async (req) => {
     (p: { email?: string | null }) => typeof p.email === "string" && p.email.includes("@"),
   ) as { id: string; email: string; full_name: string | null }[];
 
-  const phoneHashMasked = maskHash(record.phone_hash);
-  const emailHashMasked = maskHash(record.email_hash);
-
   const leadName = String(record.full_name ?? "Lead");
   const subject = `New verified lead: ${leadName}`;
 
   const html = buildLeadEmailHtml({
     lead: record,
     dashboardUrl: dashboardBase,
-    phoneHashMasked,
-    emailHashMasked,
   });
 
   const sendErrors: string[] = [];
@@ -336,19 +284,15 @@ Deno.serve(async (req) => {
     operation: "UPDATE",
     row_id: rowId,
     old_data: oldRecord ?? null,
-    new_data: { ...auditPayload, lead_snapshot: {
-      full_name: record.full_name,
-      favorite_game: record.favorite_game,
-      frequency: record.frequency,
-      heard_from: record.heard_from,
-      consent_marketing: record.consent_marketing,
-      registration_step: record.registration_step,
-      ip_address: record.ip_address,
-      is_flagged: record.is_flagged,
-      verified_at: record.verified_at,
-      phone_hash_masked: phoneHashMasked,
-      email_hash_masked: emailHashMasked,
-    } },
+    new_data: {
+      ...auditPayload,
+      lead_snapshot: {
+        full_name: record.full_name,
+        favorite_game: record.favorite_game,
+        heard_from: record.heard_from,
+        phone_verified: true,
+      },
+    },
     change_summary: changeSummary,
     performed_by: "edge_function:notify-verified-lead",
   });

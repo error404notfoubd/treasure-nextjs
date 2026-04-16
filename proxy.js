@@ -219,6 +219,10 @@ export async function proxy(request) {
   const hostBare = getHostBare(request);
   const onRealDashboard = isRealDashboardHost(hostBare);
 
+  /** Top-level page loads (e.g. “View in dashboard” from email) often send only Referer (mail host), not Origin — do not treat that as a CSRF surface. */
+  const isSafeDocumentNavigation =
+    (request.method === 'GET' || request.method === 'HEAD') && !pathname.startsWith('/api/');
+
   if (enforceHosts) {
     if (!hostAllowed(hostBare, allowedApexList, localLabel)) {
       const hostFull = (request.headers.get('host') || '').toLowerCase();
@@ -230,6 +234,7 @@ export async function proxy(request) {
 
     const requestOrigin = originFromHeader(request);
     if (
+      !isSafeDocumentNavigation &&
       requestOrigin &&
       !originAllowed(requestOrigin, allowedApexList, localLabel) &&
       !isFacebookMetaOrigin(requestOrigin)
