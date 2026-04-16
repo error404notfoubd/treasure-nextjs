@@ -1,0 +1,5 @@
+# Supabase CLI — link your project: `supabase link --project-ref <ref>`
+# Database Webhook → this function must not require JWT (webhook uses a shared secret header).
+
+[functions.notify-verified-lead]
+verify_jwt = false

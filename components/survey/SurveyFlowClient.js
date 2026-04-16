@@ -337,7 +337,7 @@ export default function SurveyFlowClient({
           <div className="modal-title">Almost there</div>
           <div className="modal-divider">Where did you hear about us?</div>
           <div className="modal-sub">
-            Your number is verified. Choose how you found us, then we will show your bonus coins.
+            Your number is verified. Choose an option below, then we will show your bonus coins.
           </div>
           {formErrors.length > 0 && (
             <div className="error-box">
@@ -346,60 +346,47 @@ export default function SurveyFlowClient({
               ))}
             </div>
           )}
-          <div className="field" style={{ marginBottom: 0 }}>
-            <div className="modal-sub" style={{ marginBottom: '10px', fontWeight: 600 }}>
+          <div className="field">
+            <label htmlFor="survey-heard-from-select">
               Where did you hear about us? <span aria-hidden="true">*</span>
-            </div>
-            <div
-              role="radiogroup"
-              aria-label="Where did you hear about us?"
-              style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}
+            </label>
+            <select
+              id="survey-heard-from-select"
+              aria-required="true"
+              value={heardFromChoice}
+              onChange={(e) => {
+                const v = e.target.value;
+                setHeardFromChoice(v);
+                if (v !== SURVEY_HEARD_FROM_OTHER) setHeardFromOther('');
+              }}
             >
+              <option value="" disabled>
+                — Select —
+              </option>
               {SURVEY_HEARD_FROM_PRESETS.map((label) => (
-                <label
-                  key={label}
-                  style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
-                >
-                  <input
-                    type="radio"
-                    name="survey-heard-from"
-                    value={label}
-                    checked={heardFromChoice === label}
-                    onChange={() => {
-                      setHeardFromChoice(label);
-                      setHeardFromOther('');
-                    }}
-                  />
-                  <span>{label}</span>
-                </label>
+                <option key={label} value={label}>
+                  {label}
+                </option>
               ))}
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+              <option value={SURVEY_HEARD_FROM_OTHER}>{SURVEY_HEARD_FROM_OTHER_LABEL}</option>
+            </select>
+            {heardFromChoice === SURVEY_HEARD_FROM_OTHER ? (
+              <div className="field" style={{ marginTop: '12px', marginBottom: 0 }}>
+                <label htmlFor="survey-heard-from-other">Please specify</label>
                 <input
-                  type="radio"
-                  name="survey-heard-from"
-                  value={SURVEY_HEARD_FROM_OTHER}
-                  checked={heardFromChoice === SURVEY_HEARD_FROM_OTHER}
-                  onChange={() => setHeardFromChoice(SURVEY_HEARD_FROM_OTHER)}
-                  style={{ marginTop: '4px' }}
+                  id="survey-heard-from-other"
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Type here"
+                  value={heardFromOther}
+                  onChange={(e) => setHeardFromOther(e.target.value)}
+                  aria-describedby="survey-heard-from-other-hint"
                 />
-                <span style={{ flex: 1 }}>
-                  {SURVEY_HEARD_FROM_OTHER_LABEL}
-                  {heardFromChoice === SURVEY_HEARD_FROM_OTHER ? (
-                    <div className="field" style={{ marginTop: '10px', marginBottom: 0 }}>
-                      <label htmlFor="survey-heard-from-other">Please specify</label>
-                      <input
-                        id="survey-heard-from-other"
-                        type="text"
-                        autoComplete="off"
-                        placeholder="Type here"
-                        value={heardFromOther}
-                        onChange={(e) => setHeardFromOther(e.target.value)}
-                      />
-                    </div>
-                  ) : null}
-                </span>
-              </label>
-            </div>
+                <p id="survey-heard-from-other-hint" className="modal-sub" style={{ marginTop: '8px', marginBottom: 0 }}>
+                  Required when you choose “Others”.
+                </p>
+              </div>
+            ) : null}
           </div>
           <button
             type="button"

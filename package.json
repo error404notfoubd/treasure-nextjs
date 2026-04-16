@@ -7,6 +7,7 @@
     "confirmModulesPurge": false,
     "onlyBuiltDependencies": [
       "sharp",
+      "supabase",
       "unrs-resolver"
     ]
   },
@@ -14,7 +15,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "supabase": "supabase"
   },
   "dependencies": {
     "@prelude.so/sdk": "^0.10.0",
@@ -32,6 +34,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
     "postcss": "^8.4.40",
+    "supabase": "^2.91.3",
     "tailwindcss": "^3.4.17"
   }
 }
