@@ -38,6 +38,7 @@ DROP TABLE IF EXISTS public.audit_log CASCADE;
 -- ── Standalone functions (not used by profiles; tables above already dropped) ─
 DROP FUNCTION IF EXISTS public.app_settings_set_updated_at();
 DROP FUNCTION IF EXISTS public.users_lead_flags_false_on_insert();
+DROP FUNCTION IF EXISTS public.users_lead_flags_enforce_dependencies();
 DROP FUNCTION IF EXISTS public.sync_users_pool_membership();
 DROP FUNCTION IF EXISTS public.fn_pool_user_ids_page(text, int, int, boolean, text, text, text);
 DROP FUNCTION IF EXISTS public.fn_pool_user_ids_count(text, boolean, text, text, text);

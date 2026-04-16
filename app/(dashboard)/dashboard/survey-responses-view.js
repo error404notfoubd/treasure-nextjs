@@ -8,6 +8,41 @@ import { IconSearch, IconEdit, IconFlag, IconTrash, IconChevLeft, IconChevRight,
 import { SkeletonStatCard, SkeletonTableRows } from "@/components/skeleton";
 import Modal from "@/components/modal";
 
+async function copyDashboardCell(value, toast, label) {
+  if (value == null || value === "") {
+    toast("Nothing to copy", "info");
+    return;
+  }
+  const text = String(value).trim();
+  if (!text) {
+    toast("Nothing to copy", "info");
+    return;
+  }
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      throw new Error("no clipboard");
+    }
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch {
+      toast("Could not copy", "error");
+      return;
+    }
+  }
+  toast(`${label} copied`, "success");
+}
+
 export default function SurveyResponsesView({ pool, pageTitle }) {
   const user = useUser();
   const toast = useToast();
@@ -116,12 +151,16 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
 
   const applyLeadFieldUpdate = async (row, field, next) => {
     const updates = { [field]: next };
-    if (field === "contacted" && !next && row.bonus_granted) {
+    if (field === "contacted" && !next) {
+      updates.has_replied = false;
+      updates.bonus_granted = false;
+    }
+    if (field === "has_replied" && !next) {
       updates.bonus_granted = false;
     }
     const beforePool = membershipPool(row);
     const afterState =
-      field === "contacted" || field === "bonus_granted"
+      field === "contacted" || field === "has_replied" || field === "bonus_granted"
         ? rowAfterLeadFieldUpdate(row, field, next)
         : null;
     const afterPool = afterState ? membershipPoolFromRowState(afterState) : beforePool;
@@ -158,14 +197,26 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
 
   const requestBonusToggle = (row) => {
     const next = !row.bonus_granted;
-    if (next && !row.contacted) {
+    if (next && (!row.contacted || !row.has_replied)) {
       toast(
-        "A bonus can only be recorded after the lead is marked as contacted. Mark “Contacted” first, then you can turn on “Bonus”.",
+        "A bonus can only be recorded after the lead is marked contacted and has replied. Mark “Contacted”, then “Has replied”, then you can turn on “Bonus”.",
         "info"
       );
       return;
     }
     setConfirmLeadToggle({ row, field: "bonus_granted", next });
+  };
+
+  const requestHasRepliedToggle = (row) => {
+    const next = !row.has_replied;
+    if (next && !row.contacted) {
+      toast(
+        "Has replied can only be set after the lead is marked contacted. Mark “Contacted” first.",
+        "info"
+      );
+      return;
+    }
+    setConfirmLeadToggle({ row, field: "has_replied", next });
   };
 
   const requestContactedToggle = (row) => {
@@ -234,7 +285,7 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
   };
 
   const totalPages = Math.ceil(total / perPage);
-  const tableColCount = 10 + (canEdit || canDelete || canVerify ? 1 : 0);
+  const tableColCount = 11 + (canEdit || canDelete || canVerify ? 1 : 0);
 
   return (
     <>
@@ -337,6 +388,7 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
                   <th>Favorite game</th>
                   <th>Status</th>
                   <th>Contacted</th>
+                  <th>Has replied</th>
                   <th>Bonus</th>
                   <th>Details</th>
                   {(canEdit || canDelete || canVerify) && <th>Actions</th>}
@@ -354,9 +406,40 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
                 ) : (
                   data.map((row) => (
                     <tr key={row.id}>
-                      <td className="font-semibold text-ink-1">{row.name}</td>
-                      <td className="font-mono text-xs text-ink-2">{row.phone}</td>
-                      <td className="text-ink-2">{row.email || "—"}</td>
+                      <td className="font-semibold text-ink-1">
+                        <button
+                          type="button"
+                          className="text-left hover:underline decoration-dotted underline-offset-2 cursor-pointer"
+                          title="Copy name"
+                          onClick={() => copyDashboardCell(row.name, toast, "Name")}
+                        >
+                          {row.name}
+                        </button>
+                      </td>
+                      <td className="font-mono text-xs text-ink-2">
+                        <button
+                          type="button"
+                          className="text-left hover:underline decoration-dotted underline-offset-2 cursor-pointer font-mono"
+                          title="Copy phone"
+                          onClick={() => copyDashboardCell(row.phone, toast, "Phone")}
+                        >
+                          {row.phone}
+                        </button>
+                      </td>
+                      <td className="text-ink-2">
+                        {row.email ? (
+                          <button
+                            type="button"
+                            className="text-left hover:underline decoration-dotted underline-offset-2 cursor-pointer"
+                            title="Copy email"
+                            onClick={() => copyDashboardCell(row.email, toast, "Email")}
+                          >
+                            {row.email}
+                          </button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className="text-ink-2 text-sm max-w-[160px]">
                         <span className="line-clamp-2" title={row.heardFrom || undefined}>
                           {row.heardFrom || "—"}
@@ -371,7 +454,16 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
                       </td>
                       <td className="text-ink-2 text-sm max-w-[140px]">
                         {row.favorite_game_name ? (
-                          <span className="badge bg-surface-3 text-ink-1">{row.favorite_game_name}</span>
+                          <button
+                            type="button"
+                            className="badge bg-surface-3 text-ink-1 cursor-pointer hover:opacity-90 transition-opacity"
+                            title="Copy favorite game"
+                            onClick={() =>
+                              copyDashboardCell(row.favorite_game_name, toast, "Favorite game")
+                            }
+                          >
+                            {row.favorite_game_name}
+                          </button>
                         ) : (
                           "—"
                         )}
@@ -401,10 +493,32 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
                         {canEdit ? (
                           <button
                             type="button"
-                            className={`badge cursor-pointer transition-opacity hover:opacity-90 ${row.bonus_granted ? "bg-accent/15 text-accent" : "bg-surface-3 text-ink-3"} ${!row.contacted && !row.bonus_granted ? "opacity-60" : ""}`}
+                            className={`badge cursor-pointer transition-opacity hover:opacity-90 ${row.has_replied ? "bg-accent/15 text-accent" : "bg-surface-3 text-ink-3"} ${!row.contacted && !row.has_replied ? "opacity-60" : ""}`}
                             title={
-                              !row.contacted && !row.bonus_granted
+                              !row.contacted && !row.has_replied
                                 ? "Mark contacted first — click for details"
+                                : row.has_replied
+                                  ? "Has replied — click to change"
+                                  : "Mark has replied"
+                            }
+                            onClick={() => requestHasRepliedToggle(row)}
+                          >
+                            {row.has_replied ? "Yes" : "No"}
+                          </button>
+                        ) : (
+                          <span className={`badge ${row.has_replied ? "bg-accent/15 text-accent" : "bg-surface-3 text-ink-3"}`}>
+                            {row.has_replied ? "Yes" : "No"}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            className={`badge cursor-pointer transition-opacity hover:opacity-90 ${row.bonus_granted ? "bg-accent/15 text-accent" : "bg-surface-3 text-ink-3"} ${!row.contacted || !row.has_replied ? "opacity-60" : ""}`}
+                            title={
+                              !row.contacted || !row.has_replied
+                                ? "Mark contacted and has replied first — click for details"
                                 : row.bonus_granted
                                   ? "Bonus recorded — click to change"
                                   : "Mark bonus granted"
@@ -562,9 +676,13 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
               ? confirmLeadToggle.next
                 ? "Confirm bonus granted"
                 : "Clear bonus granted"
-              : confirmLeadToggle.next
-                ? "Confirm contacted"
-                : "Clear contacted"
+              : confirmLeadToggle.field === "has_replied"
+                ? confirmLeadToggle.next
+                  ? "Confirm has replied"
+                  : "Clear has replied"
+                : confirmLeadToggle.next
+                  ? "Confirm contacted"
+                  : "Clear contacted"
           }
           onClose={() => setConfirmLeadToggle(null)}
           footer={
@@ -585,12 +703,9 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
   );
 }
 
-/** DB pool: leads iff not contacted and not bonus_granted (see leads/customers sync trigger). */
-function membershipPoolFromRowState({ contacted, bonus_granted }) {
-  const c = Boolean(contacted);
-  const b = Boolean(bonus_granted);
-  if (!c && !b) return "leads";
-  return "customers";
+/** DB pool: leads iff not has_replied (see leads/customers sync trigger). */
+function membershipPoolFromRowState({ has_replied }) {
+  return Boolean(has_replied) ? "customers" : "leads";
 }
 
 function membershipPool(row) {
@@ -599,16 +714,23 @@ function membershipPool(row) {
 
 function rowAfterLeadFieldUpdate(row, field, next) {
   const c0 = Boolean(row.contacted);
+  const h0 = Boolean(row.has_replied);
   const b0 = Boolean(row.bonus_granted);
   if (field === "contacted") {
     const c1 = Boolean(next);
-    const b1 = c1 ? b0 : false;
-    return { contacted: c1, bonus_granted: b1 };
+    const h1 = c1 ? h0 : false;
+    const b1 = c1 && h1 ? b0 : false;
+    return { contacted: c1, has_replied: h1, bonus_granted: b1 };
+  }
+  if (field === "has_replied") {
+    const h1 = Boolean(next);
+    const b1 = h1 ? b0 : false;
+    return { contacted: c0, has_replied: h1, bonus_granted: b1 };
   }
   if (field === "bonus_granted") {
-    return { contacted: c0, bonus_granted: Boolean(next) };
+    return { contacted: c0, has_replied: h0, bonus_granted: Boolean(next) };
   }
-  return { contacted: c0, bonus_granted: b0 };
+  return { contacted: c0, has_replied: h0, bonus_granted: b0 };
 }
 
 function LeadFieldConfirmBody({ toggle }) {
@@ -618,7 +740,7 @@ function LeadFieldConfirmBody({ toggle }) {
     return next ? (
       <p className="text-sm text-ink-2 leading-relaxed">
         Record <strong className="text-ink-1">bonus granted</strong> for <strong className="text-ink-1">{nm}</strong>?
-        They will move to the Customers list if they are not already there.
+        The Customers list is based on <strong className="text-ink-1">has replied</strong> only; this only records bonus.
       </p>
     ) : (
       <p className="text-sm text-ink-2 leading-relaxed">
@@ -626,21 +748,47 @@ function LeadFieldConfirmBody({ toggle }) {
       </p>
     );
   }
+  if (field === "has_replied") {
+    return next ? (
+      <p className="text-sm text-ink-2 leading-relaxed">
+        Mark <strong className="text-ink-1">{nm}</strong> as <strong className="text-ink-1">has replied</strong>?
+        They will move to the Customers list.
+      </p>
+    ) : (
+      <p className="text-sm text-ink-2 leading-relaxed">
+        Clear <strong className="text-ink-1">has replied</strong> for <strong className="text-ink-1">{nm}</strong>?
+        {row.bonus_granted ? (
+          <>
+            {" "}
+            <strong className="text-ink-1">Bonus granted</strong> will be cleared automatically because a bonus cannot stay on without has replied.
+          </>
+        ) : null}{" "}
+        They may return to Leads when has replied is no longer set.
+      </p>
+    );
+  }
   return next ? (
     <p className="text-sm text-ink-2 leading-relaxed">
       Mark <strong className="text-ink-1">{nm}</strong> as <strong className="text-ink-1">contacted</strong>?
-      They will appear under Customers while contacted or bonus is set.
+      After this, you can mark <strong className="text-ink-1">has replied</strong> when they respond.
     </p>
   ) : (
     <p className="text-sm text-ink-2 leading-relaxed">
       Clear <strong className="text-ink-1">contacted</strong> for <strong className="text-ink-1">{nm}</strong>?
-      {row.bonus_granted ? (
+      {row.bonus_granted || row.has_replied ? (
         <>
           {" "}
-          <strong className="text-ink-1">Bonus granted</strong> will be cleared automatically because a bonus cannot stay on without contacted.
+          <strong className="text-ink-1">Has replied</strong>
+          {row.bonus_granted ? (
+            <>
+              {" "}
+              and <strong className="text-ink-1">bonus granted</strong>
+            </>
+          ) : null}{" "}
+          will be cleared automatically because those require contacted.
         </>
       ) : null}{" "}
-      They may return to Leads if neither contacted nor bonus applies.
+      They may return to Leads when has replied is no longer set.
     </p>
   );
 }
@@ -750,6 +898,7 @@ function buildCustomerDetailRows(row) {
     push("Play frequency", row.frequency, "frequency"),
     push("Flagged", row.is_flagged, "is_flagged"),
     push("Contacted", row.contacted, "contacted"),
+    push("Has replied", row.has_replied, "has_replied"),
     push("Bonus granted", row.bonus_granted, "bonus_granted"),
     push("Notes", row.notes, "notes"),
     push("OTP last sent at", row.otp_last_sent_at, "otp_last_sent_at"),

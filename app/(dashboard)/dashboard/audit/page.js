@@ -41,6 +41,13 @@ function shouldHideAuditField(key, sampleVal, showUserIds) {
   return false;
 }
 
+/** Do not list email-related columns in audit detail (values are sensitive). */
+function shouldHideAuditEmailField(key) {
+  const k = String(key).toLowerCase();
+  if (k === "email" || k === "email_encrypted" || k === "email_hash") return true;
+  return false;
+}
+
 export default function AuditPage() {
   const toast = useToast();
   const actor = useUser();
@@ -188,8 +195,8 @@ function EntryDetail({ log, showUserIds }) {
     log.old_data?.name ||
     log.new_data?.full_name ||
     log.old_data?.full_name ||
-    log.new_data?.email ||
-    log.old_data?.email;
+    log.new_data?.lead_snapshot?.full_name ||
+    log.new_data?.lead_snapshot?.name;
 
   if (log.operation === "ROLE_CHANGE") {
     return (
@@ -252,7 +259,9 @@ function DataDiffModal({ log, summary, loading, errorMessage, showUserIds, onClo
   const newData = log?.new_data && typeof log.new_data === "object" ? log.new_data : {};
   const allKeysRaw = [...new Set([...Object.keys(oldData), ...Object.keys(newData)])];
   const allKeys = allKeysRaw.filter(
-    (key) => !shouldHideAuditField(key, oldData[key] ?? newData[key], showUserIds)
+    (key) =>
+      !shouldHideAuditEmailField(key) &&
+      !shouldHideAuditField(key, oldData[key] ?? newData[key], showUserIds)
   );
 
   const hasOld = Object.keys(oldData).length > 0;
@@ -340,7 +349,10 @@ function DataDiffModal({ log, summary, loading, errorMessage, showUserIds, onClo
               </div>
               <div className="space-y-0">
                 {Object.entries(hasOld ? oldData : newData)
-                  .filter(([key, val]) => !shouldHideAuditField(key, val, showUserIds))
+                  .filter(
+                    ([key, val]) =>
+                      !shouldHideAuditEmailField(key) && !shouldHideAuditField(key, val, showUserIds)
+                  )
                   .map(([key, val]) => (
                   <div key={key} className="flex items-baseline gap-3 py-2 border-b border-surface-3/40 last:border-b-0 px-1">
                     <span className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider w-28 flex-shrink-0">{formatFieldName(key)}</span>

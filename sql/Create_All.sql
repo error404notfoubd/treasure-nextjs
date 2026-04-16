@@ -65,7 +65,8 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending',
   ADD COLUMN IF NOT EXISTS avatar_url text,
   ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
-  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS receive_verified_lead_notifications boolean NOT NULL DEFAULT false;
 
 -- Check constraints (idempotent)
 DO $$
@@ -224,6 +225,8 @@ COMMENT ON COLUMN public.profiles.status IS 'Signup approval: pending, approved,
 COMMENT ON COLUMN public.profiles.avatar_url IS 'Optional profile image URL.';
 COMMENT ON COLUMN public.profiles.created_at IS 'Row creation time.';
 COMMENT ON COLUMN public.profiles.updated_at IS 'Last profile update (trigger-maintained).';
+COMMENT ON COLUMN public.profiles.receive_verified_lead_notifications IS
+  'When true, this dashboard profile receives email when a funnel user completes phone verification (notify-verified-lead).';
 
 
 -- SECTION: Create/04_audit_log.sql
@@ -546,6 +549,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   is_flagged          boolean NOT NULL DEFAULT false,
   bonus_granted       boolean NOT NULL DEFAULT false,
   contacted           boolean NOT NULL DEFAULT false,
+  has_replied         boolean NOT NULL DEFAULT false,
   notes               text,
   ip_address          inet,
   user_agent          text,
@@ -583,6 +587,7 @@ END $$;
 
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bonus_granted boolean NOT NULL DEFAULT false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS contacted boolean NOT NULL DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS has_replied boolean NOT NULL DEFAULT false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS heard_from text;
 
 DROP INDEX IF EXISTS idx_users_email_hash_verified;
@@ -644,11 +649,12 @@ AS $$
 BEGIN
   NEW.bonus_granted := false;
   NEW.contacted := false;
+  NEW.has_replied := false;
   RETURN NEW;
 END;
 $$;
 
-COMMENT ON FUNCTION public.users_lead_flags_false_on_insert() IS 'Trigger: sets bonus_granted and contacted to false for every new public.users row.';
+COMMENT ON FUNCTION public.users_lead_flags_false_on_insert() IS 'Trigger: sets bonus_granted, contacted, and has_replied to false for every new public.users row.';
 
 DROP TRIGGER IF EXISTS trg_users_lead_flags_on_insert ON public.users;
 CREATE TRIGGER trg_users_lead_flags_on_insert
@@ -656,16 +662,74 @@ CREATE TRIGGER trg_users_lead_flags_on_insert
   FOR EACH ROW
   EXECUTE FUNCTION public.users_lead_flags_false_on_insert();
 
+-- Coerce dependent lead flags before write (same invariants as PATCH /api/responses).
+-- Rules: (1) If contacted is false → has_replied and bonus_granted are false.
+--        (2) If has_replied is false → bonus_granted is false.
+CREATE OR REPLACE FUNCTION public.users_lead_flags_enforce_dependencies()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT COALESCE(NEW.contacted, false) THEN
+    NEW.has_replied := false;
+    NEW.bonus_granted := false;
+  ELSIF NOT COALESCE(NEW.has_replied, false) THEN
+    NEW.bonus_granted := false;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.users_lead_flags_enforce_dependencies() IS
+  'BEFORE INSERT/UPDATE on public.users: if contacted is false then has_replied and bonus_granted are false; if has_replied is false then bonus_granted is false.';
+
+DROP TRIGGER IF EXISTS trg_users_lead_flags_enforce_dependencies ON public.users;
+CREATE TRIGGER trg_users_lead_flags_enforce_dependencies
+  BEFORE INSERT OR UPDATE OF contacted, has_replied, bonus_granted ON public.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.users_lead_flags_enforce_dependencies();
+
 DO $$
 BEGIN
-  IF NOT EXISTS (
+  IF EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'users_bonus_requires_contacted'
       AND conrelid = 'public.users'::regclass
   ) THEN
+    ALTER TABLE public.users DROP CONSTRAINT users_bonus_requires_contacted;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'users_has_replied_requires_contacted'
+      AND conrelid = 'public.users'::regclass
+  ) THEN
     ALTER TABLE public.users
-      ADD CONSTRAINT users_bonus_requires_contacted
-      CHECK (NOT bonus_granted OR contacted);
+      ADD CONSTRAINT users_has_replied_requires_contacted
+      CHECK (NOT has_replied OR contacted);
+  END IF;
+END $$;
+
+UPDATE public.users u
+SET has_replied = true
+WHERE u.bonus_granted = true
+  AND u.contacted = true
+  AND u.has_replied = false;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'users_bonus_requires_contacted_and_replied'
+      AND conrelid = 'public.users'::regclass
+  ) THEN
+    ALTER TABLE public.users
+      ADD CONSTRAINT users_bonus_requires_contacted_and_replied
+      CHECK (NOT bonus_granted OR (contacted AND has_replied));
   END IF;
 END $$;
 
@@ -679,8 +743,8 @@ CREATE TABLE IF NOT EXISTS public.customers (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE public.leads IS 'Funnel rows in the Leads queue (not contacted and no bonus); mutually exclusive with public.customers.';
-COMMENT ON TABLE public.customers IS 'Funnel rows out of Leads (contacted and/or bonus); mutually exclusive with public.leads.';
+COMMENT ON TABLE public.leads IS 'Funnel rows in the Leads queue (has_replied false); mutually exclusive with public.customers.';
+COMMENT ON TABLE public.customers IS 'Funnel rows out of Leads (has_replied true); mutually exclusive with public.leads.';
 
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
@@ -717,7 +781,7 @@ AS $$
 DECLARE
   in_leads boolean;
 BEGIN
-  in_leads := (NOT COALESCE(NEW.contacted, false)) AND (NOT COALESCE(NEW.bonus_granted, false));
+  in_leads := NOT COALESCE(NEW.has_replied, false);
 
   IF in_leads THEN
     DELETE FROM public.customers WHERE user_id = NEW.user_id;
@@ -734,11 +798,11 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.sync_users_pool_membership() IS
-  'Keeps public.leads vs public.customers mutually exclusive from users.contacted / bonus_granted.';
+  'Keeps public.leads vs public.customers from users.has_replied only (after contacted-dependent coercion).';
 
 DROP TRIGGER IF EXISTS trg_users_sync_pool_membership ON public.users;
 CREATE TRIGGER trg_users_sync_pool_membership
-  AFTER INSERT OR UPDATE OF contacted, bonus_granted ON public.users
+  AFTER INSERT OR UPDATE OF contacted, has_replied ON public.users
   FOR EACH ROW
   EXECUTE FUNCTION public.sync_users_pool_membership();
 
@@ -849,24 +913,23 @@ REVOKE ALL ON FUNCTION public.fn_pool_user_ids_count(text, boolean, text, text, 
 DELETE FROM public.customers c
 USING public.users u
 WHERE c.user_id = u.user_id
-  AND (NOT COALESCE(u.contacted, false))
-  AND (NOT COALESCE(u.bonus_granted, false));
+  AND (NOT COALESCE(u.has_replied, false));
 
 DELETE FROM public.leads l
 USING public.users u
 WHERE l.user_id = u.user_id
-  AND (COALESCE(u.contacted, false) OR COALESCE(u.bonus_granted, false));
+  AND COALESCE(u.has_replied, false);
 
 INSERT INTO public.leads (user_id)
 SELECT u.user_id
 FROM public.users u
-WHERE (NOT COALESCE(u.contacted, false)) AND (NOT COALESCE(u.bonus_granted, false))
+WHERE NOT COALESCE(u.has_replied, false)
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO public.customers (user_id)
 SELECT u.user_id
 FROM public.users u
-WHERE COALESCE(u.contacted, false) OR COALESCE(u.bonus_granted, false)
+WHERE COALESCE(u.has_replied, false)
 ON CONFLICT (user_id) DO NOTHING;
 
 COMMENT ON TYPE public.registration_step IS 'Funnel stage for marketing survey signups on public.users.';
@@ -1096,13 +1159,14 @@ AS $$
 BEGIN
   -- Role is never taken from user metadata (signUp options.data); only server defaults
   -- and admin APIs may change role after insert.
-  INSERT INTO public.profiles (id, email, full_name, role, status)
+  INSERT INTO public.profiles (id, email, full_name, role, status, receive_verified_lead_notifications)
   VALUES (
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'full_name', ''),
     'viewer',
-    'pending'
+    'pending',
+    false
   );
   RETURN new;
 END;

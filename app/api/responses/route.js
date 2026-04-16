@@ -87,7 +87,7 @@ export async function GET(request) {
     return NextResponse.json(
       {
         error:
-          "Lead pool is not available. Run sql/migrations/20260416_leads_customers_pool.sql (and prior bonus/contacted migration if needed).",
+          "Lead pool is not available. Run sql/migrations/20260416_leads_customers_pool.sql, sql/migrations/20260418_users_has_replied_pool.sql, sql/migrations/20260419_users_lead_flags_db_enforcement.sql (and prior migrations if needed).",
       },
       { status: 503 }
     );
@@ -163,7 +163,7 @@ export async function PATCH(request) {
   }
 
   const safe = {};
-  const BOOLEAN_LEAD_FIELDS = new Set(["is_flagged", "bonus_granted", "contacted"]);
+  const BOOLEAN_LEAD_FIELDS = new Set(["is_flagged", "bonus_granted", "contacted", "has_replied"]);
   const allowed = [
     "full_name",
     "name",
@@ -175,6 +175,7 @@ export async function PATCH(request) {
     "notes",
     "bonus_granted",
     "contacted",
+    "has_replied",
   ];
   for (const key of allowed) {
     if (updates[key] === undefined) continue;
@@ -245,18 +246,42 @@ export async function PATCH(request) {
     }
   }
 
-  if (updates.contacted === false) {
-    safe.bonus_granted = false;
-  }
-
   const mergedContacted =
     safe.contacted !== undefined ? !!safe.contacted : !!oldRow.contacted;
+  const mergedHasReplied =
+    safe.has_replied !== undefined ? !!safe.has_replied : !!oldRow.has_replied;
   const mergedBonus =
     safe.bonus_granted !== undefined ? !!safe.bonus_granted : !!oldRow.bonus_granted;
 
-  if (mergedBonus && !mergedContacted) {
+  // Same invariants as public.users_lead_flags_enforce_dependencies (DB trigger):
+  // - contacted false → has_replied false, bonus_granted false
+  // - has_replied false → bonus_granted false
+  if (!mergedContacted) {
+    safe.contacted = false;
+    safe.has_replied = false;
+    safe.bonus_granted = false;
+  } else if (!mergedHasReplied) {
+    safe.has_replied = false;
+    safe.bonus_granted = false;
+  }
+
+  const finalContacted =
+    safe.contacted !== undefined ? !!safe.contacted : !!oldRow.contacted;
+  const finalHasReplied =
+    safe.has_replied !== undefined ? !!safe.has_replied : !!oldRow.has_replied;
+  const finalBonus =
+    safe.bonus_granted !== undefined ? !!safe.bonus_granted : !!oldRow.bonus_granted;
+
+  if (finalHasReplied && !finalContacted) {
     return NextResponse.json(
-      { error: "Bonus cannot be granted until the lead is marked contacted." },
+      { error: "Has replied cannot be set until the lead is marked contacted." },
+      { status: 422 }
+    );
+  }
+
+  if (finalBonus && (!finalContacted || !finalHasReplied)) {
+    return NextResponse.json(
+      { error: "Bonus cannot be granted until the lead is marked contacted and has replied." },
       { status: 422 }
     );
   }

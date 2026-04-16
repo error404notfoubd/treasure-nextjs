@@ -3,7 +3,7 @@
  *
  * Trigger: Database Webhook on public.users (INSERT/UPDATE) when a funnel row
  * becomes verified for the first time (verified_at newly set).
- * Emails every address in public.profiles that has a non-null email.
+ * Emails dashboard profiles where receive_verified_lead_notifications is true and email is set.
  * Configure the webhook to POST to this function URL with header:
  *   x-webhook-secret: <same value as LEAD_VERIFY_WEBHOOK_SECRET>
  *
@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
 
   const { data: profiles, error: profErr } = await supabase
     .from("profiles")
-    .select("id, email, full_name")
+    .select("id, email, full_name, receive_verified_lead_notifications")
     .not("email", "is", null);
 
   if (profErr) {
@@ -226,7 +226,13 @@ Deno.serve(async (req) => {
   }
 
   const recipients = (profiles ?? []).filter(
-    (p: { email?: string | null }) => typeof p.email === "string" && p.email.includes("@"),
+    (p: {
+      email?: string | null;
+      receive_verified_lead_notifications?: boolean | null;
+    }) =>
+      p.receive_verified_lead_notifications === true &&
+      typeof p.email === "string" &&
+      p.email.includes("@"),
   ) as { id: string; email: string; full_name: string | null }[];
 
   const leadName = String(record.full_name ?? "Lead");
@@ -257,25 +263,25 @@ Deno.serve(async (req) => {
       });
       if (!res.ok) {
         const t = await res.text();
-        sendErrors.push(`${p.email}: ${res.status} ${t}`);
+        sendErrors.push(`HTTP ${res.status} ${t.slice(0, 300)}`);
       } else {
         sent++;
       }
     } catch (e) {
-      sendErrors.push(`${p.email}: ${e instanceof Error ? e.message : String(e)}`);
+      sendErrors.push(e instanceof Error ? e.message : String(e));
     }
   }
 
   const rowId = record.user_id != null ? String(record.user_id) : null;
   const changeSummary =
-    `notify-verified-lead: emailed ${sent}/${recipients.length} profile address(es); ` +
-    (sendErrors.length ? `${sendErrors.length} error(s)` : "ok");
+    `notify-verified-lead: staff notifications ${sent}/${recipients.length} delivered` +
+    (sendErrors.length ? `; ${sendErrors.length} send error(s)` : "; ok");
 
   const auditPayload = {
     lead_user_id: rowId,
-    recipients_total: recipients.length,
-    emails_sent: sent,
-    errors: sendErrors.length ? sendErrors : null,
+    notifications_targeted: recipients.length,
+    notifications_sent: sent,
+    notification_errors: sendErrors.length ? sendErrors : null,
     webhook_type: type ?? null,
   };
 
@@ -283,7 +289,7 @@ Deno.serve(async (req) => {
     table_name: "users",
     operation: "UPDATE",
     row_id: rowId,
-    old_data: oldRecord ?? null,
+    old_data: null,
     new_data: {
       ...auditPayload,
       lead_snapshot: {

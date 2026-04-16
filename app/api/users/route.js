@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
 import { getAuthAdminClient } from "@/lib/supabase";
 import { canAssignRole, canChangeUserRole, canModifyUser, canRemoveUser } from "@/lib/roles";
+
+function verifiedLeadNotificationForRole(role) {
+  if (role === "viewer") return false;
+  if (role === "editor" || role === "admin") return true;
+  return false;
+}
 import { logAction } from "@/lib/audit";
 import { rejectIfNotDashboardHost } from "@/lib/dashboard/api-host";
 
@@ -98,12 +104,12 @@ export async function PATCH(request) {
     );
   }
 
-  const { data, error } = await admin
-    .from("profiles")
-    .update({ role })
-    .eq("id", userId)
-    .select()
-    .single();
+  const patch = {
+    role,
+    receive_verified_lead_notifications: verifiedLeadNotificationForRole(role),
+  };
+
+  const { data, error } = await admin.from("profiles").update(patch).eq("id", userId).select().single();
 
   if (error) {
     console.error("[users PATCH]", error.message);

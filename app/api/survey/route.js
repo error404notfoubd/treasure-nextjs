@@ -248,6 +248,7 @@ export async function POST(request) {
       registration_step:  'submitted',
       bonus_granted:      false,
       contacted:          false,
+      has_replied:        false,
       updated_at:         nowIso,
     };
 

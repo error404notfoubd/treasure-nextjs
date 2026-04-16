@@ -13,10 +13,11 @@ import {
   canChangeUserRole,
   canModifyUser,
   canRemoveUser,
+  canToggleVerifiedLeadNotifications,
   getRoleLevel,
 } from "@/lib/roles";
 import { PERMISSION_CATALOG, ROLE_CARD_ORDER } from "@/lib/permissions-catalog";
-import { IconEdit, IconTrash, IconRefresh, IconCheck, IconX, IconKey, IconActivity } from "@/components/icons";
+import { IconEdit, IconTrash, IconRefresh, IconCheck, IconX, IconKey, IconActivity, IconBell } from "@/components/icons";
 import { SkeletonRoleCard, SkeletonTableRows } from "@/components/skeleton";
 import Modal from "@/components/modal";
 import { validatePasswordStrength } from "@/lib/auth/password";
@@ -35,6 +36,8 @@ export default function UsersPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [resetPwTarget, setResetPwTarget] = useState(null);
   const [activityTarget, setActivityTarget] = useState(null);
+  /** { profile, next: boolean } — next is desired receive_verified_lead_notifications value */
+  const [notifyPrefModal, setNotifyPrefModal] = useState(null);
   /** Effective grants from DB for role summary cards (admins can read). */
   const [roleGrants, setRoleGrants] = useState(null);
   /** Same minimum as server + used with {@link validatePasswordStrength} in reset modal. */
@@ -158,6 +161,27 @@ export default function UsersPage() {
     }
   };
 
+  const handleNotifyPrefConfirm = async () => {
+    if (!notifyPrefModal) return;
+    const { profile, next } = notifyPrefModal;
+    try {
+      const res = await apiFetch("/api/users/notification-preference", {
+        method: "PATCH",
+        body: JSON.stringify({
+          userId: profile.id,
+          receiveVerifiedLeadNotifications: next,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      toast(next ? "Verified lead emails enabled" : "Verified lead emails disabled", "success");
+      setNotifyPrefModal(null);
+      fetchUsers();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  };
+
   return (
     <>
       <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-surface-3/50 bg-surface-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4 lg:px-7">
@@ -257,6 +281,8 @@ export default function UsersPage() {
                       canModify &&
                       canChangeUserRole(user?.role, user?.id, p.id, p.role);
                     const canRemoveRow = canRemoveUser(user?.role, user?.id, p.id, p.role);
+                    const canNotifyToggle = canToggleVerifiedLeadNotifications(user?.role, p.role);
+                    const notifyOn = p.receive_verified_lead_notifications === true;
                     return (
                       <tr key={p.id}>
                         <td>
@@ -297,6 +323,29 @@ export default function UsersPage() {
                         </td>
                         <td>
                           <div className="flex gap-1">
+                            {canNotifyToggle && (
+                              <button
+                                type="button"
+                                className={`p-1.5 rounded-md transition-colors ${
+                                  notifyOn
+                                    ? "text-accent hover:bg-accent-muted"
+                                    : "text-ink-4 hover:text-ink-2 hover:bg-surface-3"
+                                }`}
+                                title={
+                                  notifyOn
+                                    ? "Verified lead emails on — click to change"
+                                    : "Verified lead emails off — click to turn on"
+                                }
+                                aria-label={
+                                  notifyOn ? "Verified lead emails on, open change dialog" : "Turn on verified lead emails"
+                                }
+                                onClick={() =>
+                                  setNotifyPrefModal({ profile: p, next: !notifyOn })
+                                }
+                              >
+                                <IconBell off={!notifyOn} size={14} />
+                              </button>
+                            )}
                             {p.status === "pending" && (
                               <>
                                 <button
@@ -402,6 +451,38 @@ export default function UsersPage() {
           onClose={() => setResetPwTarget(null)}
           onSuccess={() => { setResetPwTarget(null); toast("Password reset successfully", "success"); }}
         />
+      )}
+
+      {notifyPrefModal && (
+        <Modal
+          title="Verified lead emails"
+          onClose={() => setNotifyPrefModal(null)}
+          footer={
+            <>
+              <button type="button" className="btn btn-secondary" onClick={() => setNotifyPrefModal(null)}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" onClick={handleNotifyPrefConfirm}>
+                Confirm
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink-2 leading-relaxed">
+            {notifyPrefModal.next ? (
+              <>
+                Turn <strong className="text-ink-1">on</strong> email when a survey lead completes phone verification for{" "}
+                <strong className="text-ink-1">{notifyPrefModal.profile.full_name || notifyPrefModal.profile.email}</strong>?
+              </>
+            ) : (
+              <>
+                Turn <strong className="text-ink-1">off</strong> those notifications for{" "}
+                <strong className="text-ink-1">{notifyPrefModal.profile.full_name || notifyPrefModal.profile.email}</strong>?
+              </>
+            )}
+          </p>
+          <p className="text-xs text-ink-4 mt-2">This updates the dashboard profile only (not survey leads).</p>
+        </Modal>
       )}
 
       {/* Delete Confirm */}
