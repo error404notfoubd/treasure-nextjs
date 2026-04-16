@@ -273,8 +273,9 @@ Deno.serve(async (req) => {
   }
 
   const rowId = record.user_id != null ? String(record.user_id) : null;
+  const leadLabel = String(record.full_name ?? "Lead").trim() || "Lead";
   const changeSummary =
-    `notify-verified-lead: staff notifications ${sent}/${recipients.length} delivered` +
+    `${leadLabel} — notify-verified-lead: staff notifications ${sent}/${recipients.length} delivered` +
     (sendErrors.length ? `; ${sendErrors.length} send error(s)` : "; ok");
 
   const auditPayload = {

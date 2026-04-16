@@ -33,7 +33,7 @@ export async function PATCH(request) {
   const admin = getAuthAdminClient();
   const { data: target, error: fetchErr } = await admin
     .from("profiles")
-    .select("id, role, receive_verified_lead_notifications, full_name")
+    .select("id, role, receive_verified_lead_notifications, full_name, email")
     .eq("id", userId)
     .single();
 
@@ -71,6 +71,7 @@ export async function PATCH(request) {
     rowId: userId,
     oldData: { receive_verified_lead_notifications: prev },
     newData: { receive_verified_lead_notifications: receiveVerifiedLeadNotifications },
+    subjectHint: target.full_name || target.email || undefined,
     actor: guard.user.fullName || guard.user.email,
     actorRole: guard.user.role,
   });

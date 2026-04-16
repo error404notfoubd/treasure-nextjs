@@ -481,7 +481,6 @@ export default function UsersPage() {
               </>
             )}
           </p>
-          <p className="text-xs text-ink-4 mt-2">This updates the dashboard profile only (not survey leads).</p>
         </Modal>
       )}
 
@@ -552,11 +551,7 @@ function ActivityModal({ target, onClose }) {
           <div className="text-center py-10 text-ink-4 text-sm">No activity recorded</div>
         ) : (
           <div className="space-y-0">
-            {logs.map((log) => {
-              const name = log.new_data?.name || log.old_data?.name ||
-                log.new_data?.full_name || log.old_data?.full_name ||
-                log.new_data?.email || log.old_data?.email;
-              return (
+            {logs.map((log) => (
                 <div key={log.id} className="flex gap-2.5 items-start py-2.5 border-b border-surface-3/40 last:border-b-0">
                   <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${OP_COLORS[log.operation] || "bg-ink-4"}`} />
                   <div className="min-w-0">
@@ -564,10 +559,7 @@ function ActivityModal({ target, onClose }) {
                       <strong className="text-ink-1">{OP_LABELS[log.operation] || log.operation}</strong>
                       {" on "}
                       <span className="text-ink-1">{log.table_name}</span>
-                      {name && <span className="text-ink-3"> — {name}</span>}
-                      {log.operation === "ROLE_CHANGE" && log.old_data?.role && log.new_data?.role && (
-                        <span className="text-ink-3"> ({log.old_data.role} → {log.new_data.role})</span>
-                      )}
+                      {log.change_summary ? <span className="text-ink-3"> — {log.change_summary}</span> : null}
                     </div>
                     <div className="text-[10px] text-ink-4 font-mono mt-0.5">
                       {new Date(log.performed_at).toLocaleString()}
@@ -577,8 +569,7 @@ function ActivityModal({ target, onClose }) {
                     </div>
                   </div>
                 </div>
-              );
-            })}
+            ))}
           </div>
         )}
       </div>

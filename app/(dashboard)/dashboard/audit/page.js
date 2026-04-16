@@ -186,45 +186,12 @@ export default function AuditPage() {
 }
 
 function EntryDetail({ log, showUserIds }) {
-  if (log.operation === "UPDATE" && log.change_summary) {
+  if (log.change_summary) {
     return <span className="text-ink-3"> — {log.change_summary}</span>;
   }
-
-  const name =
-    log.new_data?.name ||
-    log.old_data?.name ||
-    log.new_data?.full_name ||
-    log.old_data?.full_name ||
-    log.new_data?.lead_snapshot?.full_name ||
-    log.new_data?.lead_snapshot?.name;
-
-  if (log.operation === "ROLE_CHANGE") {
-    return (
-      <span className="text-ink-3">
-        {name && <> — {name}</>}
-        {log.old_data?.role && log.new_data?.role && (
-          <> ({log.old_data.role} → {log.new_data.role})</>
-        )}
-      </span>
-    );
-  }
-
-  if (log.operation === "APPROVE" || log.operation === "REJECT") {
-    return name ? <span className="text-ink-3"> — {name}</span> : null;
-  }
-
-  if (log.operation === "DELETE_USER") {
-    return name ? <span className="text-ink-3"> — {name}</span> : null;
-  }
-
-  if (name) {
-    return <span className="text-ink-3"> — {name}</span>;
-  }
-
   if (showUserIds && log.row_id) {
     return <span className="text-ink-3"> (#{log.row_id})</span>;
   }
-
   return null;
 }
 
@@ -286,6 +253,9 @@ function DataDiffModal({ log, summary, loading, errorMessage, showUserIds, onClo
             <div className={`w-2.5 h-2.5 rounded-full ${opColor}`} />
             <div>
               <h3 className="text-[15px] font-bold">{opLabel} — {meta.table_name}</h3>
+              {meta.change_summary ? (
+                <p className="text-xs text-ink-3 mt-1 font-medium">{meta.change_summary}</p>
+              ) : null}
               <p className="text-[11px] text-ink-4 font-mono mt-0.5">
                 {new Date(meta.performed_at).toLocaleString()}
                 {meta.performed_by &&

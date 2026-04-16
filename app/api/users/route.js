@@ -122,6 +122,7 @@ export async function PATCH(request) {
     rowId: userId,
     oldData: { role: target.role, email: data.email },
     newData: { role, email: data.email },
+    subjectHint: data.full_name || data.email || undefined,
     actor: guard.user.fullName || guard.user.email,
     actorRole: guard.user.role,
   });
