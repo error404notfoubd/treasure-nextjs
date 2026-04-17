@@ -10,6 +10,7 @@ import {
 } from '@/lib/survey/survey-session';
 import { resolvePhoneFromDb } from '@/lib/survey/contact-storage';
 import { FUNNEL_USERS_TABLE } from '@/lib/funnel-users';
+import { SURVEY_LAST_COMPLETED_STEP } from '@/lib/survey/last-completed-step';
 
 export const runtime = 'nodejs';
 
@@ -107,12 +108,22 @@ export async function POST(request) {
       .update({
         verified_at: verifiedAt,
         registration_step: 'verified',
+        survey_last_completed_step: SURVEY_LAST_COMPLETED_STEP.PHONE_NUMBER,
         updated_at: verifiedAt,
       })
       .eq('user_id', row.user_id)
       .is('verified_at', null);
 
     if (updateError) {
+      if (updateError.message?.includes('survey_last_completed_step')) {
+        console.error(
+          '[survey/verify] Missing column survey_last_completed_step on public.users. Run sql/migrations/20260425_users_survey_last_completed_step.sql'
+        );
+        return NextResponse.json(
+          { error: 'This site is being updated. Please try again in a few minutes.' },
+          { status: 503 }
+        );
+      }
       if (updateError.code === '23505') {
         const res = NextResponse.json(
           { error: 'This email or phone number has already been verified. Thank you!' },

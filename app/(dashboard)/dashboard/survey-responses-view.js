@@ -890,6 +890,11 @@ function buildCustomerDetailRows(row) {
     push("Phone", row.phone, "phone"),
     push("Email", row.email, "email"),
     push("From", row.heard_from ?? row.heardFrom, "heard_from", "heardFrom"),
+    push(
+      "Last completed survey step",
+      row.survey_last_completed_step,
+      "survey_last_completed_step"
+    ),
     push("Verified", row.verified, "verified"),
     push("Verified at", row.verified_at, "verified_at"),
     push("Registration step", row.registration_step, "registration_step"),

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { validateSurvey, VALID_FREQUENCIES } from '@/lib/survey/validation';
+import { SURVEY_LAST_COMPLETED_STEP } from '@/lib/survey/last-completed-step';
 import { toE164 } from '@/lib/phoneE164';
 import { formatNanpNationalDisplay, composeSurveyPhoneE164 } from '@/lib/survey/phone-national';
 
@@ -75,6 +76,7 @@ export default function SurveyFlowClient({
   /** User used the in-app “Follow us on Facebook” control (opens your Page). Not cryptographic proof of follow — that requires Meta APIs. */
   const [facebookPageOpened, setFacebookPageOpened] = useState(false);
   const [facebookFollowAcknowledged, setFacebookFollowAcknowledged] = useState(false);
+  const [facebookDmStepSaving, setFacebookDmStepSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -484,14 +486,37 @@ export default function SurveyFlowClient({
           <button
             type="button"
             className="submit-btn"
-            disabled={!facebookPageOpened || !facebookFollowAcknowledged}
-            onClick={() => {
+            disabled={!facebookPageOpened || !facebookFollowAcknowledged || facebookDmStepSaving}
+            onClick={async () => {
               setFormErrors([]);
-              setSurveyModalStep('heard_from');
+              setFacebookDmStepSaving(true);
+              try {
+                const res = await fetch('/api/survey/last-completed-step', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ step: SURVEY_LAST_COMPLETED_STEP.FACEBOOK_DM }),
+                  credentials: 'include',
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 401) {
+                  setFormErrors([data.error || 'Session expired. Please submit the survey again.']);
+                  setSurveyModalStep('form');
+                  return;
+                }
+                if (!res.ok) {
+                  setFormErrors([data.error || 'Could not continue. Please try again.']);
+                  return;
+                }
+                setSurveyModalStep('heard_from');
+              } catch {
+                setFormErrors(['Connection error. Please try again.']);
+              } finally {
+                setFacebookDmStepSaving(false);
+              }
             }}
             style={{ marginTop: '4px' }}
           >
-            Claim your coins
+            {facebookDmStepSaving ? 'Saving…' : 'Claim your coins'}
           </button>
         </div>
       ) : surveyModalStep === 'otp' ? (

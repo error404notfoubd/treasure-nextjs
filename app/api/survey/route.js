@@ -21,6 +21,7 @@ import {
   persistUserPhone,
   persistUserEmail,
 } from '@/lib/funnel-users';
+import { SURVEY_LAST_COMPLETED_STEP } from '@/lib/survey/last-completed-step';
 
 function isSurveyControlPhone(e164, controlPhoneE164) {
   const c = controlPhoneE164;
@@ -246,6 +247,7 @@ export async function POST(request) {
       user_agent:         userAgent,
       consent_marketing:  consent === true || consent === 'true',
       registration_step:  'submitted',
+      survey_last_completed_step: SURVEY_LAST_COMPLETED_STEP.PHONE_NUMBER,
       bonus_granted:      false,
       contacted:          false,
       has_replied:        false,

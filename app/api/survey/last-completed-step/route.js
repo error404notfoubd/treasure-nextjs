@@ -8,16 +8,15 @@ import {
   buildSurveySessionClearCookie,
 } from "@/lib/survey/survey-session";
 import { FUNNEL_USERS_TABLE } from "@/lib/funnel-users";
-import { normalizeHeardFromInput } from "@/lib/survey/heard-from";
 import { SURVEY_LAST_COMPLETED_STEP } from "@/lib/survey/last-completed-step";
 
 export const runtime = "nodejs";
 
-// POST /api/survey/heard-from — { name: string } (or heardFrom) → column heard_from; after verify, before success UI
+// POST /api/survey/last-completed-step — authenticated survey session only; currently accepts Facebook DM only (phone / Completed are set by other routes).
 export async function POST(request) {
   const ip = getClientIP(request);
 
-  const rateResult = await checkRateLimitDistributed(supabase, ip, "survey_heard_from");
+  const rateResult = await checkRateLimitDistributed(supabase, ip, "survey_last_completed_step");
   if (rateResult.limited) {
     return NextResponse.json(
       { error: `Too many attempts. Please wait ${Math.ceil(rateResult.retryAfterSec / 60)} minutes.` },
@@ -52,16 +51,15 @@ export async function POST(request) {
     return res;
   }
 
-  const rawSource = body.name ?? body.heardFrom;
-  const normalized = normalizeHeardFromInput(rawSource);
-  if ("error" in normalized) {
-    return NextResponse.json({ error: normalized.error }, { status: 422 });
+  const rawStep = body.step ?? body.lastCompletedStep;
+  if (rawStep !== SURVEY_LAST_COMPLETED_STEP.FACEBOOK_DM) {
+    return NextResponse.json({ error: "Invalid step." }, { status: 422 });
   }
 
   try {
     const { data: row, error: fetchError } = await supabase
       .from(FUNNEL_USERS_TABLE)
-      .select("user_id, verified_at, heard_from")
+      .select("user_id, verified_at")
       .eq("user_id", parsed.surveyResponseId)
       .single();
 
@@ -82,35 +80,31 @@ export async function POST(request) {
     const { error: updateError } = await supabase
       .from(FUNNEL_USERS_TABLE)
       .update({
-        heard_from: normalized.value,
-        survey_last_completed_step: SURVEY_LAST_COMPLETED_STEP.COMPLETED,
+        survey_last_completed_step: rawStep,
         updated_at: now,
       })
       .eq("user_id", row.user_id);
 
     if (updateError) {
-      if (
-        updateError.message?.includes("heard_from") ||
-        updateError.message?.includes("survey_last_completed_step") ||
-        updateError.code === "42703"
-      ) {
+      if (updateError.message?.includes("survey_last_completed_step") || updateError.code === "42703") {
         console.error(
-          "[survey/heard-from] Missing column on public.users (heard_from and/or survey_last_completed_step). Run sql/migrations/20260418_users_heard_from.sql and sql/migrations/20260425_users_survey_last_completed_step.sql"
+          "[survey/last-completed-step] Missing column survey_last_completed_step on public.users. Run sql/migrations/20260425_users_survey_last_completed_step.sql"
         );
         return NextResponse.json(
           { error: "This site is being updated. Please try again in a few minutes." },
           { status: 503 }
         );
       }
-      console.error("[survey/heard-from update]", updateError.message ?? updateError);
-      return NextResponse.json({ error: "Could not save your answer. Please try again." }, { status: 500 });
+      if (updateError.code === "23514") {
+        return NextResponse.json({ error: "Invalid step value." }, { status: 422 });
+      }
+      console.error("[survey/last-completed-step update]", updateError.message ?? updateError);
+      return NextResponse.json({ error: "Could not save progress. Please try again." }, { status: 500 });
     }
 
-    const res = NextResponse.json({ success: true }, { status: 200 });
-    res.headers.append("Set-Cookie", buildSurveySessionClearCookie());
-    return res;
+    return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
-    console.error("[survey/heard-from]", err?.message ?? err);
+    console.error("[survey/last-completed-step]", err?.message ?? err);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }
