@@ -991,7 +991,7 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
 
   start_credits integer NOT NULL DEFAULT 15,
   bonus_credits integer NOT NULL DEFAULT 100,
-  rtp smallint NOT NULL DEFAULT 50,
+  rtp smallint NOT NULL DEFAULT 30,
   jackpot_rate smallint NOT NULL DEFAULT 0,
   four_of_a_kind_rate smallint NOT NULL DEFAULT 3,
   symbol_weights jsonb NOT NULL DEFAULT '{"key":28,"crystal":20,"map":18,"compass":16,"shield":12,"scroll":9,"star":6}'::jsonb,
