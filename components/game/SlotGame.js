@@ -902,8 +902,7 @@ export default function SlotGame({ config }) {
                 Player support
               </h2>
               <p className="fb-contact-lead">
-                Questions about your coins, bonuses, or how the game works? Our team answers on{' '}
-                <strong>Facebook</strong>.
+                Questions about your coins, bonuses, or the game?
               </p>
             </div>
             <a
@@ -913,7 +912,7 @@ export default function SlotGame({ config }) {
               className="signup-btn fb-contact-cta"
               aria-label="Open our Facebook page in a new tab (player support)"
             >
-              Open Facebook
+              Contact Us
             </a>
           </section>
         ) : null}

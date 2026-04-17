@@ -1,12 +1,14 @@
 /**
  * Supabase Edge Function: email-verified-player
  *
- * Trigger: Database Webhook on public.users (INSERT/UPDATE) when a funnel row
- * becomes verified for the first time (verified_at newly set and registration_step
- * is `verified` — same transition as notify-verified-lead).
+ * Trigger: Database Webhook on public.users (INSERT/UPDATE) when the row becomes
+ * fully verified (`registration_step` is `verified` and `verified_at` is set), including
+ * returning to verified after it was cleared, or UPDATE without `old_record`.
  *
- * Sends a welcome email TO THE PLAYER when a decryptable email exists
- * (verification thanks, freeplay gift copy, Facebook CTA from app_settings / env).
+ * Sends a welcome email TO THE PLAYER only when a decryptable email exists **and**
+ * a valid **https** Facebook page URL is configured (app_settings.facebook_page_url and/or
+ * FACEBOOK_PAGE_URL secret). There is **no** hardcoded default URL; if none is configured,
+ * the function exits successfully without sending.
  * Uses a separate Resend "from" address (not staff lead alerts).
  *
  * Configure a second webhook (or chain from your automation) POSTing to this URL with:
@@ -21,9 +23,10 @@
  *   RESEND_VERIFIED_PLAYER_FROM               (e.g. "Treasure <rewards@yourdomain.com>") — must differ from staff RESEND_FROM
  * Optional:
  *   SITE_NAME                                 Brand name in copy (default Treasure Hunt)
- *   FACEBOOK_PAGE_URL                         Fallback only if app_settings.facebook_page_url is missing/invalid
+ *   FACEBOOK_PAGE_URL                         Optional https URL if not stored in app_settings
  *
- * Facebook link for players: set in Dashboard → System → Public links (app_settings.facebook_page_url).
+ * Facebook link for players: Dashboard → System → Public links (`app_settings.facebook_page_url`),
+ * or set FACEBOOK_PAGE_URL on the function. If neither yields a valid https URL, no email is sent.
  */
 import { Buffer } from "node:buffer";
 import { createDecipheriv, createHash } from "node:crypto";
@@ -31,8 +34,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const WEBHOOK_SECRET_HEADER = "x-webhook-secret";
 
+const DEFAULT_SITE_NAME = "Treasure Hunt";
+
 function buildPlayerVerifiedEmailSubject(siteName: string): string {
-  const s = siteName.trim();
+  const s = siteName.trim() || DEFAULT_SITE_NAME;
   return `Thanks — your ${s} number is verified. Claim your redeemable freeplay.`;
 }
 
@@ -52,30 +57,37 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function isNewlyVerified(
+function isFullyVerifiedRecord(record: Record<string, unknown>): boolean {
+  const verifiedAt = record.verified_at;
+  if (verifiedAt == null || verifiedAt === "") return false;
+  const step = String(record.registration_step ?? "").toLowerCase();
+  return step === "verified";
+}
+
+/** Fire when the user is fully verified in `record` and this webhook reflects a transition into (or back into) that state. */
+function shouldSendOnVerifiedTransition(
   type: string | undefined,
   record: Record<string, unknown>,
   oldRecord: Record<string, unknown> | null | undefined,
 ): boolean {
-  const verifiedAt = record.verified_at;
-  if (verifiedAt == null || verifiedAt === "") return false;
+  if (!isFullyVerifiedRecord(record)) return false;
 
-  const step = String(record.registration_step ?? "").toLowerCase();
-  if (step !== "verified") return false;
+  const t = type?.toUpperCase();
+  if (t === "INSERT") return true;
 
-  if (type === "INSERT") return true;
-
-  if (type === "UPDATE") {
-    const prevVerifiedAt = oldRecord?.verified_at;
-    const prevStep = String(oldRecord?.registration_step ?? "").toLowerCase();
-    const wasVerifiedBefore =
-      (prevVerifiedAt != null && prevVerifiedAt !== "") || prevStep === "verified";
-    if (!wasVerifiedBefore) return true;
+  if (t === "UPDATE") {
+    if (oldRecord == null || typeof oldRecord !== "object") return true;
+    const prevVerifiedAt = oldRecord.verified_at;
+    const prevStep = String(oldRecord.registration_step ?? "").toLowerCase();
+    const hadFullVerification =
+      prevStep === "verified" && prevVerifiedAt != null && String(prevVerifiedAt).trim() !== "";
+    if (!hadFullVerification) return true;
+    if (prevStep !== "verified") return true;
+    if (String(prevVerifiedAt ?? "") !== String(record.verified_at ?? "")) return true;
     return false;
   }
 
-  if (!type) return true;
-
+  if (!t) return true;
   return false;
 }
 
@@ -111,8 +123,7 @@ function resolvePlayerEmail(stored: unknown, secret: string): string | null {
 
 async function resolveFacebookPageUrl(
   supabase: ReturnType<typeof createClient> | null,
-): Promise<string> {
-  const envRaw = (Deno.env.get("FACEBOOK_PAGE_URL") ?? "").trim();
+): Promise<string | null> {
   if (supabase) {
     const { data, error } = await supabase.from("app_settings").select("facebook_page_url").eq("id", 1).maybeSingle();
     if (error) console.error("app_settings facebook_page_url", error.message);
@@ -126,6 +137,7 @@ async function resolveFacebookPageUrl(
       }
     }
   }
+  const envRaw = (Deno.env.get("FACEBOOK_PAGE_URL") ?? "").trim();
   if (envRaw) {
     try {
       const u = new URL(envRaw);
@@ -134,6 +146,7 @@ async function resolveFacebookPageUrl(
       /* fall through */
     }
   }
+  return null;
 }
 
 function firstNameFromFullName(fullName: unknown): string {
@@ -334,9 +347,26 @@ Deno.serve(async (req) => {
   const type = body.type?.toUpperCase();
   const oldRecord = body.old_record ?? undefined;
 
-  if (!isNewlyVerified(type, record, oldRecord)) {
+  if (!shouldSendOnVerifiedTransition(type, record, oldRecord)) {
     return new Response(
-      JSON.stringify({ ok: true, skipped: true, reason: "not a new verification" }),
+      JSON.stringify({ ok: true, skipped: true, reason: "not_verified_transition" }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  let supabase: ReturnType<typeof createClient> | null = null;
+  if (supabaseUrl && serviceKey) {
+    supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+
+  const facebookUrl = await resolveFacebookPageUrl(supabase);
+  if (facebookUrl == null || facebookUrl.trim() === "") {
+    return new Response(
+      JSON.stringify({ ok: true, skipped: true, reason: "no_facebook_url" }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -368,18 +398,9 @@ Deno.serve(async (req) => {
     });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  let supabase: ReturnType<typeof createClient> | null = null;
-  if (supabaseUrl && serviceKey) {
-    supabase = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-  }
   const { names: gameNames, favoriteTitle } = await buildGameNamesForEmail(record, supabase);
 
   const siteName = (Deno.env.get("SITE_NAME") ?? DEFAULT_SITE_NAME).trim() || DEFAULT_SITE_NAME;
-  const facebookUrl = await resolveFacebookPageUrl(supabase);
 
   const greetingName = firstNameFromFullName(record.full_name);
   const emailSubject = buildPlayerVerifiedEmailSubject(siteName);
