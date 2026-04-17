@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useUser } from "../dashboard-client";
 import { useToast } from "@/components/toast";
 import { apiFetch } from "@/lib/dashboard/api-client";
-import { SkeletonTableRows } from "@/components/skeleton";
 import { IconGripVertical, IconTrash } from "@/components/icons";
 
 function rowKey(g) {
@@ -276,19 +275,41 @@ export default function GamesListClient() {
                     <span className="sr-only">Reorder</span>
                   </th>
                   <th>Name</th>
-                  <th>Active</th>
+                  <th className="hidden sm:table-cell">Active</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <SkeletonTableRows rows={6} cols={4} />
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <tr key={i}>
+                      <td className="px-3 py-2.5 sm:px-4 sm:py-3">
+                        <div className="mx-auto h-3 w-6 rounded-md bg-surface-3 animate-pulse" />
+                      </td>
+                      <td className="min-w-0 px-3 py-2.5 sm:px-4 sm:py-3">
+                        <div className="h-3 w-[min(100%,12rem)] rounded-md bg-surface-3 animate-pulse" />
+                      </td>
+                      <td className="hidden px-3 py-2.5 sm:table-cell sm:px-4 sm:py-3">
+                        <div className="h-3 w-20 rounded-md bg-surface-3 animate-pulse" />
+                      </td>
+                      <td className="px-3 py-2.5 sm:px-4 sm:py-3">
+                        <div className="h-8 w-28 rounded-md bg-surface-3 animate-pulse" />
+                      </td>
+                    </tr>
+                  ))
                 ) : games.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="py-12 text-center text-sm text-ink-4">
-                      No games yet. Add one below.
-                    </td>
-                  </tr>
+                  <>
+                    <tr className="sm:hidden">
+                      <td colSpan={3} className="py-12 text-center text-sm text-ink-4">
+                        No games yet. Add one below.
+                      </td>
+                    </tr>
+                    <tr className="hidden sm:table-row">
+                      <td colSpan={4} className="py-12 text-center text-sm text-ink-4">
+                        No games yet. Add one below.
+                      </td>
+                    </tr>
+                  </>
                 ) : (
                   games.map((g, index) => {
                     const id = rowKey(g);
@@ -318,15 +339,15 @@ export default function GamesListClient() {
                             <IconGripVertical size={18} />
                           </button>
                         </td>
-                        <td>
+                        <td className="min-w-0 max-w-[min(100%,18rem)] whitespace-normal sm:max-w-md">
                           <input
-                            className="input max-w-xs"
+                            className="input w-full min-w-0 max-w-none"
                             value={d.name}
                             onChange={(e) => setDraft(id, { name: e.target.value })}
                             disabled={reordering}
                           />
                         </td>
-                        <td>
+                        <td className="hidden sm:table-cell">
                           <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-2">
                             <input
                               type="checkbox"

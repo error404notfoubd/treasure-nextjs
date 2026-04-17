@@ -452,12 +452,12 @@ export default function SurveyResponsesView({ pool, pageTitle }) {
                           {row.verified ? "✓ Verified" : "Unverified"}
                         </span>
                       </td>
-                      <td className="text-ink-2 text-sm max-w-[140px]">
+                      <td className="min-w-0 max-w-[min(100%,12rem)] whitespace-normal break-words align-top text-ink-2 text-sm sm:max-w-[14rem]">
                         {row.favorite_game_name ? (
                           <button
                             type="button"
-                            className="badge bg-surface-3 text-ink-1 cursor-pointer hover:opacity-90 transition-opacity"
-                            title="Copy favorite game"
+                            className="badge h-auto min-h-0 max-w-full cursor-pointer items-start justify-start whitespace-normal break-words rounded-lg py-1 text-left leading-snug transition-opacity hover:opacity-90 bg-surface-3 text-ink-1"
+                            title={row.favorite_game_name}
                             onClick={() =>
                               copyDashboardCell(row.favorite_game_name, toast, "Favorite game")
                             }
