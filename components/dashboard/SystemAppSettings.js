@@ -1,6 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60 * MS_PER_SECOND;
+const MS_PER_HOUR = 60 * MS_PER_MINUTE;
+
+/** @param {unknown} totalMs */
+function msToDurationParts(totalMs) {
+  const t = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(Number(totalMs)) || 0));
+  const ms = t % MS_PER_SECOND;
+  let rest = Math.floor(t / MS_PER_SECOND);
+  const s = rest % 60;
+  rest = Math.floor(rest / 60);
+  const m = rest % 60;
+  const h = Math.floor(rest / 60);
+  return { h, m, s, ms };
+}
+
+/** @param {{ h: number; m: number; s: number; ms: number }} parts */
+function durationPartsToMs(parts) {
+  const h = Math.max(0, Math.floor(Number(parts.h)) || 0);
+  const m = Math.max(0, Math.floor(Number(parts.m)) || 0);
+  const s = Math.max(0, Math.floor(Number(parts.s)) || 0);
+  const ms = Math.max(0, Math.floor(Number(parts.ms)) || 0);
+  const sum = h * MS_PER_HOUR + m * MS_PER_MINUTE + s * MS_PER_SECOND + ms;
+  return Math.min(Number.MAX_SAFE_INTEGER, sum);
+}
+
+function parseNonNegIntString(str) {
+  if (str === "" || str == null) return 0;
+  const n = Math.floor(Number(str));
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
 import { apiFetch } from "@/lib/dashboard/api-client";
 import { useToast } from "@/components/toast";
 
@@ -273,11 +305,11 @@ export default function SystemAppSettings() {
               value={s.otpSendsPerPhoneMax}
               onChange={(v) => setField("otpSendsPerPhoneMax", num(v))}
             />
-            <Field
-              label="OTP phone window (ms)"
-              description="Rolling window length in milliseconds for the per-phone OTP cap (e.g. 3600000 = one hour)."
-              value={s.otpSendsPerPhoneWindowMs}
-              onChange={(v) => setField("otpSendsPerPhoneWindowMs", num(v))}
+            <DurationFieldsControl
+              label="OTP phone window"
+              description="Rolling window for the per-phone OTP cap. Enter hours, minutes, seconds, and milliseconds; the total is saved as one value in the database (milliseconds)."
+              valueMs={s.otpSendsPerPhoneWindowMs}
+              onChangeMs={(ms) => setField("otpSendsPerPhoneWindowMs", ms)}
             />
           </div>
           <DescribedControl
@@ -306,11 +338,11 @@ export default function SystemAppSettings() {
               value={s.loginRateLimitMaxPerWindow}
               onChange={(v) => setField("loginRateLimitMaxPerWindow", num(v))}
             />
-            <Field
-              label="Login window (ms)"
-              description="Sliding window for the login attempt counter, in milliseconds."
-              value={s.loginRateLimitWindowMs}
-              onChange={(v) => setField("loginRateLimitWindowMs", num(v))}
+            <DurationFieldsControl
+              label="Login window"
+              description="Sliding window for the login attempt counter. Enter hours, minutes, seconds, and milliseconds; stored as total milliseconds."
+              valueMs={s.loginRateLimitWindowMs}
+              onChangeMs={(ms) => setField("loginRateLimitWindowMs", ms)}
             />
             <Field
               label="Signup attempts (max per window)"
@@ -318,11 +350,11 @@ export default function SystemAppSettings() {
               value={s.signupRateLimitMaxPerWindow}
               onChange={(v) => setField("signupRateLimitMaxPerWindow", num(v))}
             />
-            <Field
-              label="Signup window (ms)"
-              description="Sliding window for the signup counter. Supports long windows (stored as a large integer)."
-              value={s.signupRateLimitWindowMs}
-              onChange={(v) => setField("signupRateLimitWindowMs", num(v))}
+            <DurationFieldsControl
+              label="Signup window"
+              description="Sliding window for the signup counter. Supports long windows; enter hours, minutes, seconds, and milliseconds (saved as total milliseconds)."
+              valueMs={s.signupRateLimitWindowMs}
+              onChangeMs={(ms) => setField("signupRateLimitWindowMs", ms)}
             />
             <Field
               label="Check availability (max per window)"
@@ -330,11 +362,11 @@ export default function SystemAppSettings() {
               value={s.checkAvailabilityMaxPerWindow}
               onChange={(v) => setField("checkAvailabilityMaxPerWindow", num(v))}
             />
-            <Field
-              label="Check availability window (ms)"
-              description="Sliding window for availability-check rate limiting."
-              value={s.checkAvailabilityWindowMs}
-              onChange={(v) => setField("checkAvailabilityWindowMs", num(v))}
+            <DurationFieldsControl
+              label="Check availability window"
+              description="Sliding window for availability-check rate limiting. Enter hours, minutes, seconds, and milliseconds; stored as total milliseconds."
+              valueMs={s.checkAvailabilityWindowMs}
+              onChangeMs={(ms) => setField("checkAvailabilityWindowMs", ms)}
             />
             <Field
               label="Password minimum length"
@@ -342,11 +374,11 @@ export default function SystemAppSettings() {
               value={s.passwordMinLength}
               onChange={(v) => setField("passwordMinLength", num(v))}
             />
-            <Field
-              label="Name / email debounce (ms)"
-              description="Delay after typing before the sign-up form calls the availability API, to reduce duplicate requests."
-              value={s.authUiCheckDebounceMs}
-              onChange={(v) => setField("authUiCheckDebounceMs", num(v))}
+            <DurationFieldsControl
+              label="Name / email debounce"
+              description="Delay after typing before the sign-up form calls the availability API. Enter hours, minutes, seconds, and milliseconds; stored as total milliseconds."
+              valueMs={s.authUiCheckDebounceMs}
+              onChangeMs={(ms) => setField("authUiCheckDebounceMs", ms)}
             />
           </div>
           <DescribedControl
@@ -388,6 +420,105 @@ function Field({ label, description, value, onChange }) {
       <label className="label">{label}</label>
       {description ? <p className="text-[11px] text-ink-4 leading-relaxed">{description}</p> : null}
       <input type="number" className="input text-sm" value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function DurationFieldsControl({ label, description, valueMs, onChangeMs }) {
+  const [str, setStr] = useState(() => {
+    const p = msToDurationParts(
+      Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(Number(valueMs)) || 0))
+    );
+    return { h: String(p.h), m: String(p.m), s: String(p.s), ms: String(p.ms) };
+  });
+
+  useEffect(() => {
+    const safe = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(Number(valueMs)) || 0));
+    const p = msToDurationParts(safe);
+    setStr({ h: String(p.h), m: String(p.m), s: String(p.s), ms: String(p.ms) });
+  }, [valueMs]);
+
+  const emitFromStrings = (next) => {
+    setStr(next);
+    const total = durationPartsToMs({
+      h: parseNonNegIntString(next.h),
+      m: parseNonNegIntString(next.m),
+      s: parseNonNegIntString(next.s),
+      ms: parseNonNegIntString(next.ms),
+    });
+    onChangeMs(total);
+  };
+
+  const onPart =
+    (key) =>
+    (e) => {
+      emitFromStrings({ ...str, [key]: e.target.value });
+    };
+
+  const totalPreview = durationPartsToMs({
+    h: parseNonNegIntString(str.h),
+    m: parseNonNegIntString(str.m),
+    s: parseNonNegIntString(str.s),
+    ms: parseNonNegIntString(str.ms),
+  });
+
+  return (
+    <div className="space-y-1.5">
+      <label className="label">{label}</label>
+      {description ? <p className="text-[11px] text-ink-4 leading-relaxed">{description}</p> : null}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="min-w-0">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-ink-4">Hours</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            className="input mt-0.5 font-mono text-sm"
+            autoComplete="off"
+            value={str.h}
+            onChange={onPart("h")}
+            aria-label={`${label} — hours`}
+          />
+        </div>
+        <div className="min-w-0">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-ink-4">Minutes</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            className="input mt-0.5 font-mono text-sm"
+            autoComplete="off"
+            value={str.m}
+            onChange={onPart("m")}
+            aria-label={`${label} — minutes`}
+          />
+        </div>
+        <div className="min-w-0">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-ink-4">Seconds</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            className="input mt-0.5 font-mono text-sm"
+            autoComplete="off"
+            value={str.s}
+            onChange={onPart("s")}
+            aria-label={`${label} — seconds`}
+          />
+        </div>
+        <div className="min-w-0">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-ink-4">Milliseconds</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            className="input mt-0.5 font-mono text-sm"
+            autoComplete="off"
+            value={str.ms}
+            onChange={onPart("ms")}
+            aria-label={`${label} — milliseconds`}
+          />
+        </div>
+      </div>
+      <p className="text-[10px] font-mono text-ink-4">
+        Total saved: {totalPreview.toLocaleString()} ms
+      </p>
     </div>
   );
 }
