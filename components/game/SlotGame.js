@@ -243,6 +243,20 @@ export default function SlotGame({ config }) {
     if (!costPresets.includes(bet)) setBetVal(costPresets[0]);
   }, [costPresets, bet]);
 
+  const gameModalOpen = rulesOpen || (!phoneVerified && treasureSurveyNudgeOpen);
+  useEffect(() => {
+    if (!gameModalOpen) return undefined;
+    const html = document.documentElement;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    html.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, [gameModalOpen]);
+
   useEffect(() => {
     if (!rulesOpen) return undefined;
     const onKey = e => {
@@ -751,6 +765,9 @@ export default function SlotGame({ config }) {
 
   function setBet(v) { setBetVal(v); }
 
+  /** Survey banner urgency (pulse + copy) only when broke and not mid-spin. */
+  const surveyOutOfCoinsPromo = credits <= 0 && !spinning;
+
   // ══════════════════════════════════════════════
   //  RENDER
   // ══════════════════════════════════════════════
@@ -855,7 +872,12 @@ export default function SlotGame({ config }) {
           </div>
 
           <div className="search-action-wrap">
-            <button className="hunt-action-btn" id="hunt-action-btn" disabled={spinning || credits <= 0} onClick={doSpin}>
+            <button
+              className="hunt-action-btn"
+              id="hunt-action-btn"
+              disabled={spinning || credits <= 0 || credits < bet}
+              onClick={doSpin}
+            >
               {spinning ? 'SEARCHING...' : 'EXPLORE'}
             </button>
           </div>
@@ -874,12 +896,12 @@ export default function SlotGame({ config }) {
         </div>
 
         <section
-          className={`survey-banner facebook-contact-banner${credits <= 0 ? ' highlight' : ''}`}
+          className={`survey-banner facebook-contact-banner${surveyOutOfCoinsPromo ? ' highlight' : ''}`}
           aria-labelledby="survey-bonus-heading"
         >
           <div className="sb-text">
             <h2 id="survey-bonus-heading" className="fb-contact-heading">
-              {credits <= 0 ? 'Out of coins? Unlock more' : 'Unlock bonus coins'}
+              {surveyOutOfCoinsPromo ? 'Out of coins? Unlock more' : 'Unlock bonus coins'}
             </h2>
             <p className="fb-contact-lead">
               Take a quick survey and <strong>unlock {bonusCredits} bonus coins</strong> for your quest.

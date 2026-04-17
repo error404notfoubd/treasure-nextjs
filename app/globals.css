@@ -502,7 +502,8 @@ a.game-auth-link{
   box-shadow:0 1px 0 #6a4800,0 3px 10px rgba(200,140,0,.3);
   animation:none;
 }
-.hunt-action-btn:disabled{opacity:.35;cursor:not-allowed;transform:none;animation:none;}
+.hunt-action-btn:disabled{opacity:.35;cursor:not-allowed;transform:none;animation-play-state:paused;}
+.hunt-action-btn:disabled::after{animation-play-state:paused;}
 .hunt-action-btn::after{
   content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);
@@ -1000,8 +1001,8 @@ a.signup-btn.fb-contact-cta{
   animation:game-route-enter .32s ease-out both;
 }
 @keyframes game-route-enter{
-  from{opacity:.86;filter:brightness(.96);}
-  to{opacity:1;filter:brightness(1);}
+  from{opacity:.86;}
+  to{opacity:1;}
 }
 
 /* ══ STANDALONE SURVEY (/survey) ══ */
