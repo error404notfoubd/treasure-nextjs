@@ -81,7 +81,7 @@ export default function CookieConsent({ onAccept }) {
             minWidth: 0,
           }}
         >
-          We use cookies to run the site and, where applicable, advertising cookies (Meta Pixel) to
+          We use cookies to run the site and, where applicable, advertising cookies to
           measure ad performance. See our{' '}
           <Link href="/privacy" style={{ color: '#f5c842', textDecoration: 'underline' }}>
             Privacy Policy

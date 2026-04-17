@@ -525,10 +525,6 @@ a.game-auth-link{
   50%{box-shadow:0 0 20px rgba(40,232,122,.15),0 0 40px rgba(40,232,122,.06);}
 }
 .sb-text{flex:1;min-width:0;}
-.sb-title{font-family:var(--font-display);font-size:clamp(10px,3vw,13px);letter-spacing:1px;
-  color:#40e878;margin-bottom:2px;text-shadow:0 0 10px rgba(40,232,122,.4);}
-.sb-sub{font-size:clamp(9px,2.5vw,10px);color:#7ab890;line-height:1.5;}
-.sb-sub strong{color:#a0dab0;}
 .signup-btn{
   flex-shrink:0;
   white-space:nowrap;padding:10px 12px;
@@ -548,7 +544,7 @@ a.signup-btn{
 }
 .signup-btn:active{transform:translateY(3px);}
 
-/* Homepage — Facebook player support (paired with survey banner; calmer, no pulse) */
+/* Homepage — survey unlock + Facebook player support (calmer frame, no pulse) */
 .survey-banner.facebook-contact-banner{
   animation:none;
   border-color:rgba(251,191,36,.32);
@@ -558,6 +554,7 @@ a.signup-btn{
 .survey-banner.facebook-contact-banner .sb-text{
   max-width:min(100%,38rem);
 }
+.fb-contact-heading,
 .facebook-contact-heading{
   margin:0 0 4px;
   padding:0;
@@ -566,8 +563,8 @@ a.signup-btn{
   font-weight:600;
   letter-spacing:1.2px;
   text-transform:uppercase;
-  color:#c8f5d8;
-  text-shadow:0 0 12px rgba(40,232,122,.25);
+  color:var(--gold2);
+  text-shadow:0 0 10px rgba(245,200,66,.4),0 0 22px rgba(200,146,10,.22);
 }
 .facebook-contact-banner .fb-contact-lead{
   margin:0 0 10px;
@@ -583,20 +580,6 @@ a.signup-btn{
 .facebook-contact-banner .fb-contact-lead strong{
   color:#e8faf0;
   font-weight:700;
-}
-.facebook-contact-banner .fb-contact-highlight{
-  margin:0;
-  padding:10px 12px;
-  border-radius:10px;
-  font-family:var(--font-body);
-  font-size:clamp(11px,2.9vw,13px);
-  line-height:1.5;
-  font-weight:600;
-  text-align:left;
-  color:#1a2332;
-  background:linear-gradient(135deg,#fde68a 0%,#fcd34d 100%);
-  border:1px solid #d97706;
-  box-shadow:0 1px 0 rgba(0,0,0,0.06);
 }
 a.signup-btn.fb-contact-cta{
   align-self:center;
@@ -615,9 +598,10 @@ a.signup-btn.fb-contact-cta{
   position:relative;
   z-index:20;
 }
-.survey-banner.highlight .sb-title{
-  color:#60ff98;font-size:clamp(11px,3.4vw,15px);
-  text-shadow:0 0 14px rgba(40,232,122,.7);
+.survey-banner.highlight .fb-contact-heading{
+  color:var(--gold4);
+  font-size:clamp(11px,3.4vw,15px);
+  text-shadow:0 0 12px rgba(245,200,66,.55),0 0 28px rgba(255,232,176,.35);
 }
 .survey-banner.highlight .signup-btn{
   animation:highlight-btn-pulse 1.5s ease-in-out infinite;

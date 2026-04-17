@@ -873,22 +873,27 @@ export default function SlotGame({ config }) {
           </button>
         </div>
 
-        <div className={`survey-banner${credits <= 0 ? ' highlight' : ''}`}>
+        <section
+          className={`survey-banner facebook-contact-banner${credits <= 0 ? ' highlight' : ''}`}
+          aria-labelledby="survey-bonus-heading"
+        >
           <div className="sb-text">
-            <div className="sb-title">{credits <= 0 ? 'Out of coins? Unlock more' : 'Unlock bonus coins'}</div>
-            <div className="sb-sub">
+            <h2 id="survey-bonus-heading" className="fb-contact-heading">
+              {credits <= 0 ? 'Out of coins? Unlock more' : 'Unlock bonus coins'}
+            </h2>
+            <p className="fb-contact-lead">
               Take a quick survey and <strong>unlock {bonusCredits} bonus coins</strong> for your quest.
-            </div>
+            </p>
           </div>
           <Link
             href="/survey"
             prefetch
-            className="signup-btn"
+            className="signup-btn fb-contact-cta"
             onClick={() => forceAcceptConsent()}
           >
             Get coins
           </Link>
-        </div>
+        </section>
 
         {facebookPageUrl ? (
           <section className="survey-banner facebook-contact-banner" aria-labelledby="fb-contact-heading">
@@ -898,10 +903,7 @@ export default function SlotGame({ config }) {
               </h2>
               <p className="fb-contact-lead">
                 Questions about your coins, bonuses, or how the game works? Our team answers on{' '}
-                <strong>Facebook</strong> — usually within a day.
-              </p>
-              <p className="fb-contact-highlight">
-                Open our official page in a new tab, then send us a message.
+                <strong>Facebook</strong>.
               </p>
             </div>
             <a

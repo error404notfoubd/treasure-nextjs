@@ -9,7 +9,8 @@ export const metadata = {
 };
 
 export default async function SurveyPage() {
-  const economy = slotGameEconomyForConfig(await getAppSettings());
+  const settings = await getAppSettings();
+  const economy = slotGameEconomyForConfig(settings);
   const config = { ...GAME_CONFIG, ...economy };
   const surveyCountryCode = config.SURVEY_DEFAULT_COUNTRY_CODE ?? '+1';
 
@@ -20,7 +21,7 @@ export default async function SurveyPage() {
       bonusCredits={config.BONUS_CREDITS}
       startCredits={config.START_CREDITS}
       siteName={siteConfig.NAME}
-      facebookPageUrl={typeof siteConfig.FACEBOOK_PAGE_URL === 'string' ? siteConfig.FACEBOOK_PAGE_URL.trim() : ''}
+      facebookPageUrl={typeof settings.facebookPageUrl === 'string' ? settings.facebookPageUrl.trim() : ''}
     />
   );
 }

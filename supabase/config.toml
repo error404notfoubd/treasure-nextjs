@@ -3,3 +3,6 @@
 
 [functions.notify-verified-lead]
 verify_jwt = false
+
+[functions.email-verified-player]
+verify_jwt = false

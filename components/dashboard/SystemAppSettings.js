@@ -138,6 +138,27 @@ export default function SystemAppSettings() {
 
       <div className="max-h-[75vh] overflow-y-auto px-4 py-4 sm:px-5 space-y-5">
         <Section
+          title="Public links"
+          lead="Used by automated player emails (e.g. after phone verification). Must be a full https URL to your official Facebook page."
+        >
+          <DescribedControl
+            label="Facebook page URL"
+            description="Opens in the player email button and plain-text fallback. Example: https://www.facebook.com/yourpage"
+            input={
+              <input
+                type="url"
+                className="input font-mono text-sm w-full max-w-xl"
+                placeholder="https://www.facebook.com/…"
+                value={s.facebookPageUrl ?? ""}
+                onChange={(e) => setField("facebookPageUrl", e.target.value)}
+                spellCheck={false}
+                autoComplete="url"
+              />
+            }
+          />
+        </Section>
+
+        <Section
           title="Public game (marketing site)"
           lead="Controls the free-to-play experience: starting balance, outcome mix, timing, and coin search sizes. Reward and rarity rates influence random outcomes on the client."
         >

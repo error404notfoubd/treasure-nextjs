@@ -993,6 +993,7 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
   password_min_length smallint NOT NULL DEFAULT 8,
   default_signup_role text NOT NULL DEFAULT 'viewer',
   auth_ui_check_debounce_ms integer NOT NULL DEFAULT 500,
+  facebook_page_url text NOT NULL DEFAULT 'https://www.facebook.com/treasurehuntdotfun',
 
   updated_at timestamptz NOT NULL DEFAULT now(),
 
@@ -1076,6 +1077,7 @@ COMMENT ON COLUMN public.app_settings.check_availability_window_ms IS 'Sliding w
 COMMENT ON COLUMN public.app_settings.password_min_length IS 'Minimum password length for dashboard password rules.';
 COMMENT ON COLUMN public.app_settings.default_signup_role IS 'Role assigned to new dashboard signups (viewer, editor, admin).';
 COMMENT ON COLUMN public.app_settings.auth_ui_check_debounce_ms IS 'Client debounce hint for availability check calls.';
+COMMENT ON COLUMN public.app_settings.facebook_page_url IS 'Official Facebook page URL (https); player verification email and System settings.';
 COMMENT ON COLUMN public.app_settings.updated_at IS 'Last change to this settings row.';
 
 -- SECTION: Create/12_role_permission_grants.sql

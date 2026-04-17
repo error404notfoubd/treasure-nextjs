@@ -13,6 +13,9 @@
  *   RESEND_API_KEY                           (https://resend.com)
  *   RESEND_FROM                              (e.g. "Treasure <leads@yourdomain.com>")
  *   DASHBOARD_BASE_URL                       (e.g. "https://dashboard.yourdomain.com")
+ *
+ * Player-facing welcome email (separate Resend sender): see edge function `email-verified-player`
+ * (second Database Webhook on public.users for the same verification transition).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
@@ -69,7 +72,6 @@ function buildLeadEmailHtml(args: {
   const { lead, dashboardUrl } = args;
   const name = escapeHtml(String(lead.full_name ?? "—"));
   const game = escapeHtml(String(lead.favorite_game ?? "—"));
-  const heard = escapeHtml(String(lead.heard_from ?? "—"));
 
   const ctaHref = escapeHtml(`${dashboardUrl.replace(/\/$/, "")}/dashboard`);
 
@@ -97,7 +99,6 @@ function buildLeadEmailHtml(args: {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
                 <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;width:38%;vertical-align:top;">Name</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;font-weight:500;">${name}</td></tr>
                 <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Favorite game</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;">${game}</td></tr>
-                <tr><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;color:#8ba4c7;vertical-align:top;">Heard from</td><td style="padding:10px 0;border-bottom:1px solid #2d3a4d;">${heard}</td></tr>
               </table>
               <p style="margin:18px 0 0;color:#c5d0e0;font-size:14px;line-height:1.55;">The user has verified their phone number.</p>
               <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:28px;">
@@ -296,7 +297,6 @@ Deno.serve(async (req) => {
       lead_snapshot: {
         full_name: record.full_name,
         favorite_game: record.favorite_game,
-        heard_from: record.heard_from,
         phone_verified: true,
       },
     },

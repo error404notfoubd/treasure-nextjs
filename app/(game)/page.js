@@ -1,5 +1,5 @@
 import SlotGame from '@/components/game/SlotGame';
-import GAME_CONFIG, { siteConfig } from '@/lib/config';
+import GAME_CONFIG from '@/lib/config';
 import { getAppSettings, slotGameEconomyForConfig } from '@/lib/settings/app-settings';
 
 function normalizeFacebookPageUrl(raw) {
@@ -15,8 +15,9 @@ function normalizeFacebookPageUrl(raw) {
 }
 
 export default async function Home() {
-  const economy = slotGameEconomyForConfig(await getAppSettings());
-  const FACEBOOK_PAGE_URL = normalizeFacebookPageUrl(siteConfig.FACEBOOK_PAGE_URL);
+  const settings = await getAppSettings();
+  const economy = slotGameEconomyForConfig(settings);
+  const FACEBOOK_PAGE_URL = normalizeFacebookPageUrl(settings.facebookPageUrl);
   const config = { ...GAME_CONFIG, ...economy, FACEBOOK_PAGE_URL };
   return <SlotGame config={config} />;
 }
